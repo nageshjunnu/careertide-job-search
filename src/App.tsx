@@ -667,20 +667,26 @@ function SearchBand({
   return (
     <section className="search-console">
       <div className="search-console-header">
-        <span>⚡ Career Finder</span>
-        <small>One search across trusted job platforms</small>
+        <div className="finder-title">
+          <span className="finder-mark">CT</span>
+          <div>
+            <strong>CareerTide Finder</strong>
+            <small>Search role, location, and experience across trusted platforms</small>
+          </div>
+        </div>
+        <span className="finder-status">13 sources connected</span>
       </div>
       <div className="search-row">
         <label>
-          <span>💼 Job / Skill</span>
+          <span>Job / skill / company</span>
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Java, Python, AWS, Data Analyst, UI UX..." />
         </label>
         <label>
-          <span>📍 Location</span>
+          <span>Preferred location</span>
           <input value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Hyderabad, Bengaluru, Remote..." />
         </label>
         <label>
-          <span>🎯 Experience</span>
+          <span>Experience level</span>
           <CustomSelect
             icon="target"
             options={[
@@ -1212,17 +1218,33 @@ function CustomSelect({
   value: string
   onChange: (value: string) => void
 }) {
+  const [open, setOpen] = useState(false)
+  const selectedLabel = options.find(([optionValue]) => optionValue === value)?.[1] ?? value
+
   return (
-    <div className="custom-select">
+    <div className={`custom-select ${open ? 'open' : ''}`}>
       <Icon name={icon} />
-      <select value={value} onChange={(event) => onChange(event.target.value)}>
-        {options.map(([optionValue, label]) => (
-          <option key={optionValue} value={optionValue}>
-            {label}
-          </option>
-        ))}
-      </select>
-      <Icon name="chevron" />
+      <button className="select-trigger" onClick={() => setOpen((current) => !current)} type="button">
+        <span>{selectedLabel}</span>
+        <Icon name="chevron" />
+      </button>
+      {open && (
+        <div className="select-menu">
+          {options.map(([optionValue, label]) => (
+            <button
+              className={optionValue === value ? 'selected' : ''}
+              key={optionValue}
+              onClick={() => {
+                onChange(optionValue)
+                setOpen(false)
+              }}
+              type="button"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
