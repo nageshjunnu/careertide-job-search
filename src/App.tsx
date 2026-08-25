@@ -324,6 +324,12 @@ const workflowTutorials = [
   },
 ]
 
+const roleFamilies = ['All', 'Technology', 'HR / Recruiting', 'Sales', 'Marketing', 'Finance', 'Operations', 'Support', 'Design', 'Product']
+const experienceFilters = ['All', '0 - 3 years', '1 - 4 years', '3 - 6 years', '6+ years']
+const locationFilters = ['All', 'Current location', 'Remote']
+const salaryFilters = ['All', 'Salary shown', 'Not disclosed']
+const dateFilters = ['All', 'Today', 'This week']
+
 const encode = (value: string) => encodeURIComponent(value.trim())
 const slug = (value: string) => encode(value).replaceAll('%20', '-').replaceAll('%2C', '')
 
@@ -464,6 +470,11 @@ function RoutedApp() {
   const [experience, setExperience] = useState('0-3')
   const [sourceFilter, setSourceFilter] = useState('All')
   const [jobType, setJobType] = useState('All')
+  const [roleFamily, setRoleFamily] = useState('All')
+  const [experienceFilter, setExperienceFilter] = useState('All')
+  const [locationFilter, setLocationFilter] = useState('All')
+  const [salaryFilter, setSalaryFilter] = useState('All')
+  const [dateFilter, setDateFilter] = useState('All')
   const [jobs, setJobs] = useState<Job[]>(sourceRedirectJobs('Java Python AWS', 'Hyderabad Secunderabad'))
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState('Showing source-matched fallback jobs. Search loads third-party remote jobs.')
@@ -527,14 +538,36 @@ function RoutedApp() {
   const filteredJobs = useMemo(
     () =>
       jobs.filter((job) => {
+        const searchable = `${job.title} ${job.company} ${job.tags.join(' ')} ${job.source}`.toLowerCase()
         const sourceMatches = sourceFilter === 'All' || job.source === sourceFilter
         const typeMatches =
           jobType === 'All' ||
           job.employmentType.toLowerCase().includes(jobType.toLowerCase()) ||
           (jobType === 'Remote' && job.remote)
-        return sourceMatches && typeMatches
+        const roleMatches =
+          roleFamily === 'All' ||
+          (roleFamily === 'Technology' && /software|engineer|developer|cloud|devops|data|ai|frontend|backend|security|technology|java|python|aws/.test(searchable)) ||
+          (roleFamily === 'HR / Recruiting' && /hr|recruit|talent acquisition|ta\b|hiring/.test(searchable)) ||
+          (roleFamily === 'Sales' && /sales|business development|bd/.test(searchable)) ||
+          (roleFamily === 'Marketing' && /marketing|seo|growth|content/.test(searchable)) ||
+          (roleFamily === 'Finance' && /finance|account|payroll/.test(searchable)) ||
+          (roleFamily === 'Operations' && /operation|admin|coordinator/.test(searchable)) ||
+          (roleFamily === 'Support' && /support|customer|bpo|voice|success/.test(searchable)) ||
+          (roleFamily === 'Design' && /design|ui|ux|figma/.test(searchable)) ||
+          (roleFamily === 'Product' && /product|project|scrum/.test(searchable))
+        const experienceMatches = experienceFilter === 'All' || job.experience === experienceFilter || (experienceFilter === '6+ years' && job.experience.includes('6'))
+        const locationMatches =
+          locationFilter === 'All' ||
+          (locationFilter === 'Remote' && job.remote) ||
+          (locationFilter === 'Current location' && job.location.toLowerCase().includes(location.split(' ')[0].toLowerCase()))
+        const salaryMatches =
+          salaryFilter === 'All' ||
+          (salaryFilter === 'Salary shown' && job.salary !== 'Not disclosed') ||
+          (salaryFilter === 'Not disclosed' && job.salary === 'Not disclosed')
+        const dateMatches = dateFilter === 'All' || (dateFilter === 'Today' && job.posted === 'Today') || (dateFilter === 'This week' && (job.posted === 'Today' || /[1-7] days ago/.test(job.posted)))
+        return sourceMatches && typeMatches && roleMatches && experienceMatches && locationMatches && salaryMatches && dateMatches
       }),
-    [jobs, sourceFilter, jobType],
+    [jobs, sourceFilter, jobType, roleFamily, experienceFilter, locationFilter, salaryFilter, dateFilter, location],
   )
 
   const sourceOptions = ['All', ...Array.from(new Set(jobs.map((job) => job.source)))]
@@ -601,7 +634,7 @@ function RoutedApp() {
 
       <Routes>
         <Route path="/" element={<HomePage {...searchProps} jobs={jobs} filteredJobs={filteredJobs} loading={loading} status={status} lastSearch={lastSearch} />} />
-        <Route path="/jobs" element={<JobsPage {...searchProps} filteredJobs={filteredJobs} jobs={jobs} loading={loading} status={status} sourceFilter={sourceFilter} setSourceFilter={setSourceFilter} sourceOptions={sourceOptions} jobType={jobType} setJobType={setJobType} tags={tags} lastSearch={lastSearch} searchCount={searchCount} />} />
+        <Route path="/jobs" element={<JobsPage {...searchProps} filteredJobs={filteredJobs} jobs={jobs} loading={loading} status={status} sourceFilter={sourceFilter} setSourceFilter={setSourceFilter} sourceOptions={sourceOptions} jobType={jobType} setJobType={setJobType} roleFamily={roleFamily} setRoleFamily={setRoleFamily} experienceFilter={experienceFilter} setExperienceFilter={setExperienceFilter} locationFilter={locationFilter} setLocationFilter={setLocationFilter} salaryFilter={salaryFilter} setSalaryFilter={setSalaryFilter} dateFilter={dateFilter} setDateFilter={setDateFilter} tags={tags} lastSearch={lastSearch} searchCount={searchCount} />} />
         <Route path="/companies" element={<CompaniesPage jobs={jobs} />} />
         <Route path="/sources" element={<SourcesPage query={query} location={location} setQuery={setQuery} setPage={setPage} />} />
         <Route path="/workflows" element={<WorkflowsPage />} />
@@ -804,6 +837,16 @@ function JobsPage(props: {
   sourceOptions: string[]
   jobType: string
   setJobType: (value: string) => void
+  roleFamily: string
+  setRoleFamily: (value: string) => void
+  experienceFilter: string
+  setExperienceFilter: (value: string) => void
+  locationFilter: string
+  setLocationFilter: (value: string) => void
+  salaryFilter: string
+  setSalaryFilter: (value: string) => void
+  dateFilter: string
+  setDateFilter: (value: string) => void
   tags: string[]
   lastSearch: string
 }) {
@@ -814,7 +857,7 @@ function JobsPage(props: {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [props.filteredJobs.length, props.sourceFilter, props.jobType, props.searchCount])
+  }, [props.filteredJobs.length, props.sourceFilter, props.jobType, props.roleFamily, props.experienceFilter, props.locationFilter, props.salaryFilter, props.dateFilter, props.searchCount])
 
   return (
     <>
@@ -852,8 +895,17 @@ function JobsPage(props: {
             </div>
           </div>
           <aside className="sidebar">
+            <div className="filter-summary">
+              <strong>Smart filters</strong>
+              <span>{props.filteredJobs.length} matched from {props.jobs.length} results</span>
+            </div>
+            <FilterGroup title="Role family" options={roleFamilies} value={props.roleFamily} onChange={props.setRoleFamily} />
             <FilterGroup title="Job source" options={props.sourceOptions} value={props.sourceFilter} onChange={props.setSourceFilter} />
             <FilterGroup title="Type of employment" options={['All', 'Full Time', 'Remote', 'Hybrid']} value={props.jobType} onChange={props.setJobType} />
+            <FilterGroup title="Experience" options={experienceFilters} value={props.experienceFilter} onChange={props.setExperienceFilter} />
+            <FilterGroup title="Location" options={locationFilters} value={props.locationFilter} onChange={props.setLocationFilter} />
+            <FilterGroup title="Salary" options={salaryFilters} value={props.salaryFilter} onChange={props.setSalaryFilter} />
+            <FilterGroup title="Date posted" options={dateFilters} value={props.dateFilter} onChange={props.setDateFilter} />
             <div className="filter-box">
               <h3>Tags Cloud</h3>
               <div className="tag-cloud">

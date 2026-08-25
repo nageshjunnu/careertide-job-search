@@ -1485,6 +1485,28 @@ footer {
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.2);
 }
 
+.filter-summary {
+  display: grid;
+  gap: 6px;
+  padding: 18px;
+  border: 1px solid rgba(45, 212, 191, 0.18);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 90% 0%, rgba(251, 191, 36, 0.14), transparent 30%),
+    rgba(15, 23, 42, 0.72);
+}
+
+.filter-summary strong {
+  color: #f8fafc;
+  font-size: 18px;
+}
+
+.filter-summary span {
+  color: #5eead4;
+  font-size: 13px;
+  font-weight: 900;
+}
+
 .filter-box {
   overflow: hidden;
   border-radius: 22px;
