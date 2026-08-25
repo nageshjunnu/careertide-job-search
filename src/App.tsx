@@ -78,7 +78,11 @@ const quickSearches = [
   'Java Developer',
   'Python Developer',
   'AWS DevOps Engineer',
+  'HR Recruiter',
+  'Talent Acquisition',
   'Data Analyst',
+  'Sales Executive',
+  'Digital Marketing',
   'MERN Stack Developer',
   'Cybersecurity Analyst',
   'Fresher Software Developer',
@@ -357,19 +361,43 @@ const sourceRedirectJobs = (query: string, location: string): Job[] => {
   const isData = lower.includes('data') || lower.includes('analyst') || lower.includes('sql') || lower.includes('power bi')
   const isSecurity = lower.includes('security') || lower.includes('cyber') || lower.includes('soc')
   const isBackend = lower.includes('java') || lower.includes('python') || lower.includes('node') || lower.includes('.net')
+  const isRecruiting = lower.includes('hr') || lower.includes('recruiter') || lower.includes('talent acquisition') || lower.includes(' ta ') || lower === 'ta'
+  const isSales = lower.includes('sales') || lower.includes('business development') || lower.includes('bdm')
+  const isMarketing = lower.includes('marketing') || lower.includes('seo') || lower.includes('digital marketing') || lower.includes('content')
+  const isFinance = lower.includes('finance') || lower.includes('account') || lower.includes('payroll')
+  const isOperations = lower.includes('operation') || lower.includes('admin') || lower.includes('coordinator')
+  const isSupport = lower.includes('support') || lower.includes('customer') || lower.includes('bpo') || lower.includes('voice')
+  const isDesign = lower.includes('design') || lower.includes('ui') || lower.includes('ux') || lower.includes('figma')
+  const isProduct = lower.includes('product manager') || lower.includes('project manager') || lower.includes('scrum')
   const baseTitle = isCloud
     ? 'Cloud & DevOps Engineer'
     : isData
       ? 'Data Analytics Specialist'
       : isSecurity
         ? 'Cybersecurity Analyst'
-        : isAi
-          ? 'AI / Machine Learning Engineer'
-          : isReact
-            ? 'Frontend Application Developer'
-            : isBackend
-              ? 'Backend Software Engineer'
-              : `${cleanQuery} Professional`
+        : isRecruiting
+          ? 'HR & Talent Acquisition Specialist'
+          : isSales
+            ? 'Sales & Business Development Executive'
+            : isMarketing
+              ? 'Marketing & Growth Specialist'
+              : isFinance
+                ? 'Finance & Accounts Executive'
+                : isOperations
+                  ? 'Operations Coordinator'
+                  : isSupport
+                    ? 'Customer Support Specialist'
+                    : isDesign
+                      ? 'UI/UX Designer'
+                      : isProduct
+                        ? 'Product / Project Manager'
+                        : isAi
+                          ? 'AI / Machine Learning Engineer'
+                          : isReact
+                            ? 'Frontend Application Developer'
+                            : isBackend
+                              ? 'Backend Software Engineer'
+                              : `${cleanQuery} Professional`
   const companies = [
     'Naukri Search Results',
     'LinkedIn Hiring Network',
@@ -404,9 +432,17 @@ const sourceRedirectJobs = (query: string, location: string): Job[] => {
       .concat(isCloud ? ['AWS', 'DevOps'] : [])
       .concat(isData ? ['SQL', 'Analytics'] : [])
       .concat(isSecurity ? ['Security', 'SOC'] : [])
+      .concat(isRecruiting ? ['HR', 'Recruiting', 'Talent Acquisition'] : [])
+      .concat(isSales ? ['Sales', 'BD'] : [])
+      .concat(isMarketing ? ['Marketing', 'SEO'] : [])
+      .concat(isFinance ? ['Finance', 'Accounts'] : [])
+      .concat(isOperations ? ['Operations', 'Admin'] : [])
+      .concat(isSupport ? ['Support', 'Customer Success'] : [])
+      .concat(isDesign ? ['UI/UX', 'Design'] : [])
+      .concat(isProduct ? ['Product', 'Project'] : [])
       .concat(isReact ? ['Frontend', 'TypeScript'] : [])
       .concat(isAi ? ['AI', 'Machine Learning'] : [])
-      .concat(!isCloud && !isData && !isSecurity && !isReact && !isAi ? ['Software', 'Technology'] : [])
+      .concat(!isCloud && !isData && !isSecurity && !isRecruiting && !isSales && !isMarketing && !isFinance && !isOperations && !isSupport && !isDesign && !isProduct && !isReact && !isAi ? ['Jobs', 'Career'] : [])
       .slice(0, 5),
     remote: source.includes('Remote') || source === 'Remote OK',
   }))
@@ -514,7 +550,7 @@ function RoutedApp() {
   const searchProps = { query, setQuery, location, setLocation, experience, setExperience, setPage, onSearch: runSearch, searchCount }
 
   const showWaveRipple = (event: PointerEvent<HTMLDivElement>) => {
-    if ((event.target as HTMLElement).closest('button, a, input, select, textarea, pre')) return
+    if (!(event.target as HTMLElement).closest('button, a, [role="button"]')) return
     const createdAt = Date.now()
     const nextWaves = Array.from({ length: 3 }).map((_, index) => ({
       id: createdAt + index,

@@ -951,6 +951,216 @@ footer button {
   }
 }
 
+@media (max-width: 1024px) {
+  .content {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: static;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .filter-box:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .job-body {
+    grid-template-columns: 58px minmax(0, 1fr);
+  }
+
+  .job-location,
+  .job-time,
+  .job-tags {
+    grid-column: 2;
+  }
+}
+
+@media (max-width: 720px) {
+  .mini-top {
+    display: none;
+  }
+
+  .navbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+    padding: 16px;
+  }
+
+  .nav-links {
+    display: flex;
+    width: 100%;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .nav-links a {
+    flex: 0 0 auto;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  .home-hero {
+    grid-template-columns: 1fr;
+    padding: 34px 16px 76px;
+  }
+
+  .hero-copy h1 {
+    font-size: 38px;
+  }
+
+  .hero-copy > p:not(.eyebrow) {
+    font-size: 15px;
+  }
+
+  .page-shell {
+    width: min(100% - 24px, 1180px);
+    margin-top: 34px;
+  }
+
+  .search-console {
+    border-radius: 18px;
+    padding: 12px;
+  }
+
+  .search-row {
+    grid-template-columns: 1fr;
+  }
+
+  .search-action {
+    min-height: 56px;
+  }
+
+  .popular,
+  .source-chips {
+    gap: 8px;
+  }
+
+  .popular button,
+  .source-chips a {
+    font-size: 12px;
+  }
+
+  .category-grid,
+  .home-jobs-grid,
+  .company-shortcuts,
+  .company-grid,
+  .source-grid,
+  .source-strip,
+  .workflow-process,
+  .tutorial-layout,
+  .use-case-grid,
+  .workflow-link-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-card,
+  .cta-panel,
+  .beginner-workflow,
+  .tutorial-player {
+    padding: 22px;
+  }
+
+  .section-title {
+    display: grid;
+    gap: 12px;
+  }
+
+  .sidebar {
+    grid-template-columns: 1fr;
+    padding: 10px;
+  }
+
+  .filter-box:last-child {
+    grid-column: auto;
+  }
+
+  .results-header {
+    display: grid;
+  }
+
+  .results-header select {
+    width: 100%;
+  }
+
+  .job-body {
+    grid-template-columns: 50px minmax(0, 1fr);
+    padding: 70px 16px 18px;
+  }
+
+  .job-location,
+  .job-time,
+  .job-tags {
+    grid-column: 1 / -1;
+  }
+
+  .job-footer {
+    grid-template-columns: 1fr;
+    padding: 14px 16px 16px;
+  }
+
+  .job-footer a {
+    justify-self: stretch;
+    text-align: center;
+  }
+
+  .featured {
+    top: 14px;
+    right: 14px;
+  }
+
+  .pagination {
+    flex-wrap: wrap;
+  }
+
+  .workflow-head {
+    display: grid;
+  }
+
+  footer {
+    display: grid;
+    padding: 30px 16px;
+  }
+
+  footer form {
+    display: grid;
+  }
+
+  footer input,
+  footer button {
+    border-radius: 12px;
+  }
+}
+
+@media (max-width: 420px) {
+  .brand {
+    font-size: 20px;
+  }
+
+  .brand-mark {
+    width: 34px;
+    height: 34px;
+  }
+
+  .hero-copy h1 {
+    font-size: 32px;
+  }
+
+  .page-hero {
+    padding: 62px 14px 90px;
+  }
+
+  .page-hero h1 {
+    font-size: 28px;
+  }
+
+  .job-title {
+    font-size: 15px;
+  }
+}
+
 /* CareerTide premium theme overrides */
 .mini-top {
   background: #08111f;
