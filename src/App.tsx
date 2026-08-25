@@ -681,12 +681,17 @@ function SearchBand({
         </label>
         <label>
           <span>🎯 Experience</span>
-          <select value={experience} onChange={(event) => setExperience(event.target.value)}>
-            <option value="0-1">0 - 1 years</option>
-            <option value="0-3">0 - 3 years</option>
-            <option value="3-6">3 - 6 years</option>
-            <option value="6+">More than 6 years</option>
-          </select>
+          <CustomSelect
+            icon="target"
+            options={[
+              ['0-1', '0 - 1 years'],
+              ['0-3', '0 - 3 years'],
+              ['3-6', '3 - 6 years'],
+              ['6+', 'More than 6 years'],
+            ]}
+            value={experience}
+            onChange={setExperience}
+          />
         </label>
         <button className="search-action" onClick={onSearch} type="button">
           <span>Explore Jobs</span>
@@ -851,9 +856,16 @@ function JobsPage(props: {
   lastSearch: string
 }) {
   const [currentPage, setCurrentPage] = useState(1)
+  const [sortBy, setSortBy] = useState('newest')
   const pageSize = 6
-  const totalPages = Math.max(1, Math.ceil(props.filteredJobs.length / pageSize))
-  const visibleJobs = props.filteredJobs.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+  const sortedJobs = useMemo(() => {
+    const nextJobs = [...props.filteredJobs]
+    if (sortBy === 'source') return nextJobs.sort((a, b) => a.source.localeCompare(b.source))
+    if (sortBy === 'salary') return nextJobs.sort((a, b) => (a.salary === 'Not disclosed' ? 1 : 0) - (b.salary === 'Not disclosed' ? 1 : 0))
+    return nextJobs
+  }, [props.filteredJobs, sortBy])
+  const totalPages = Math.max(1, Math.ceil(sortedJobs.length / pageSize))
+  const visibleJobs = sortedJobs.slice((currentPage - 1) * pageSize, currentPage * pageSize)
 
   useEffect(() => {
     setCurrentPage(1)
@@ -872,10 +884,16 @@ function JobsPage(props: {
                 <p>{props.status}</p>
                 <p className="last-search">Last search: {props.lastSearch}</p>
               </div>
-              <select>
-                <option>Newest</option>
-                <option>Relevant</option>
-              </select>
+              <CustomSelect
+                icon="sort"
+                options={[
+                  ['newest', 'Newest first'],
+                  ['source', 'Group by source'],
+                  ['salary', 'Salary shown first'],
+                ]}
+                value={sortBy}
+                onChange={setSortBy}
+              />
             </div>
             <div className="job-list">
               {visibleJobs.map((job, index) => <JobCard job={job} index={index} key={job.id} />)}
@@ -1152,8 +1170,8 @@ function JobCard({ job, index }: { job: Job; index: number }) {
           <a href={job.sourceUrl} target="_blank" rel="noreferrer" className="job-title">{job.title}</a>
           <p>{job.company}</p>
         </div>
-        <div className="job-location">📍 {job.location}</div>
-        <div className="job-time">🕒 {job.posted}</div>
+        <div className="job-location"><span className="mini-icon location-icon" />{job.location}</div>
+        <div className="job-time"><span className="mini-icon time-icon" />{job.posted}</div>
         <div className="job-tags">
           <span>{job.employmentType}</span>
           {job.tags.slice(0, 2).map((tag) => <span key={`${job.id}-${tag}`}>{tag}</span>)}
@@ -1180,6 +1198,57 @@ function FilterGroup({ title, options, value, onChange }: { title: string; optio
         </label>
       ))}
     </div>
+  )
+}
+
+function CustomSelect({
+  icon,
+  options,
+  value,
+  onChange,
+}: {
+  icon: 'target' | 'sort'
+  options: Array<[string, string]>
+  value: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <div className="custom-select">
+      <Icon name={icon} />
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
+        {options.map(([optionValue, label]) => (
+          <option key={optionValue} value={optionValue}>
+            {label}
+          </option>
+        ))}
+      </select>
+      <Icon name="chevron" />
+    </div>
+  )
+}
+
+function Icon({ name }: { name: 'target' | 'sort' | 'chevron' }) {
+  if (name === 'target') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z" />
+        <path d="M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />
+        <path d="M12 12h.01" />
+      </svg>
+    )
+  }
+  if (name === 'sort') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M7 6h10M10 12h7M13 18h4" />
+        <path d="m6 16-2 2 2 2" />
+      </svg>
+    )
+  }
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="m7 10 5 5 5-5" />
+    </svg>
   )
 }
 

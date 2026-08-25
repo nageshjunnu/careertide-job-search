@@ -1161,6 +1161,103 @@ footer button {
   }
 }
 
+.custom-select {
+  position: relative;
+  display: grid;
+  grid-template-columns: 22px 1fr 20px;
+  align-items: center;
+  gap: 10px;
+  min-height: 51px;
+  border: 1px solid rgba(45, 212, 191, 0.2);
+  border-radius: 16px;
+  padding: 0 14px;
+  background:
+    linear-gradient(135deg, rgba(45, 212, 191, 0.08), rgba(251, 191, 36, 0.04)),
+    rgba(8, 17, 31, 0.78);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.custom-select:focus-within {
+  border-color: rgba(45, 212, 191, 0.52);
+  box-shadow: 0 0 0 4px rgba(45, 212, 191, 0.1);
+}
+
+.custom-select svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: #5eead4;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.custom-select svg:last-child {
+  stroke: #fcd34d;
+}
+
+.custom-select select {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  border: 0;
+  padding: 0;
+  color: #f8fafc;
+  background: transparent;
+  box-shadow: none;
+  appearance: none;
+}
+
+.custom-select select:focus {
+  box-shadow: none;
+}
+
+.results-header .custom-select {
+  width: min(240px, 100%);
+}
+
+.job-card .corner {
+  width: 50px;
+  height: 38px;
+  border-radius: 0 0 18px 0;
+  clip-path: none;
+  padding: 0;
+  color: #f8fafc;
+  background:
+    linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(99, 102, 241, 0.88));
+  box-shadow: 0 12px 26px rgba(59, 130, 246, 0.22);
+}
+
+.job-card .logo {
+  color: #06111f;
+  background:
+    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.62), transparent 18%),
+    linear-gradient(135deg, #fbbf24, #2dd4bf);
+  box-shadow: 0 14px 32px rgba(251, 191, 36, 0.18);
+}
+
+.mini-icon {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 7px;
+  background: currentColor;
+  opacity: 0.85;
+}
+
+.location-icon {
+  clip-path: path("M7 0C4.1 0 2 2.1 2 5c0 3.4 5 9 5 9s5-5.6 5-9c0-2.9-2.1-5-5-5Zm0 7.2A2.2 2.2 0 1 1 7 2.8a2.2 2.2 0 0 1 0 4.4Z");
+}
+
+.time-icon {
+  border-radius: 50%;
+  clip-path: none;
+  background:
+    radial-gradient(circle, transparent 43%, currentColor 45% 52%, transparent 54%),
+    linear-gradient(currentColor, currentColor) 50% 27% / 2px 26% no-repeat,
+    linear-gradient(currentColor, currentColor) 61% 54% / 28% 2px no-repeat;
+}
+
 /* CareerTide premium theme overrides */
 .mini-top {
   background: #08111f;
