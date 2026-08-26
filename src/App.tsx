@@ -289,6 +289,22 @@ const workflowProcess = [
   ['5', 'Track follow-ups', 'Store status, reminders, recruiter contacts, and next follow-up date.'],
 ]
 
+const thirdPartyWorkflowSteps = [
+  ['Naukri', 'Official search link', ['Build a keyword, location, and experience search URL.', 'Open the results page for the user to review current listings.', 'Save approved roles and their original apply links in the tracker.'], 'Broad India-focused role discovery'],
+  ['LinkedIn', 'Official search link', ['Generate a Jobs search URL with the selected role and location.', 'Let the user filter results and inspect the company and job details.', 'Save or open the original application only after user approval.'], 'Network-led roles and recruiter visibility'],
+  ['Google Jobs', 'Search discovery', ['Run a Google Jobs search using the selected role and location.', 'Compare the source and company shown for each listing.', 'Prefer the direct company link when it is available, then track the choice.'], 'Finding listings repeated across boards'],
+  ['Indeed', 'Official search link', ['Create an Indeed search URL from the search rules.', 'Review the listing, salary, and employer details with the user.', 'Store shortlisted jobs, then open the original apply flow manually.'], 'Global and local job coverage'],
+  ['Foundit', 'Official search link', ['Build the Foundit role and location search URL.', 'Filter the results for experience and relevant skills.', 'Save approved roles with source, URL, and application status.'], 'India and APAC opportunities'],
+  ['Instahyre', 'Official search link', ['Open the role-focused Instahyre search page.', 'Review matching startup roles and candidate requirements.', 'Add selected roles to the review queue before applying.'], 'Curated startup hiring'],
+  ['Wellfound', 'Official search link', ['Generate the Wellfound startup jobs search URL.', 'Check company stage, remote policy, and role fit.', 'Track the selected job and open its application page after review.'], 'Startup and remote-friendly roles'],
+  ['Glassdoor', 'Official search link', ['Open Glassdoor using the role and location search.', 'Review company ratings, salary signals, and job details.', 'Use the insight to prioritize a saved application or research task.'], 'Company research and salary context'],
+  ['Cutshort', 'Official search link', ['Create a tech-role search link for Cutshort.', 'Check skills, location, and recruiter requirements.', 'Save suitable jobs to the tracker for a manual application.'], 'India tech and startup roles'],
+  ['TimesJobs', 'Official search link', ['Open a personalized TimesJobs search from the chosen filters.', 'Review titles and employers against the user profile.', 'Record shortlisted jobs and their source URLs.'], 'Additional India job-board coverage'],
+  ['Shine', 'Official search link', ['Generate the Shine role and location search link.', 'Review opportunities and screen out weak matches.', 'Send only approved jobs to the application queue.'], 'Broad India hiring coverage'],
+  ['Remote OK', 'Official search link', ['Build a remote role search URL.', 'Verify timezone, location eligibility, and remote requirements.', 'Save strong matches and open the source application manually.'], 'Remote-only job discovery'],
+  ['Remotive', 'Public API or official search', ['Use the permitted public API or official search page for matching remote roles.', 'Normalize the role, company, tags, and application URL.', 'Deduplicate, score, and notify the user about high-quality matches.'], 'Automated remote-job intake'],
+] as const
+
 const beginnerWorkflowSteps = [
   ['Start simple', 'Create one workflow for daily discovery first. Do not automate applying until tracking works.'],
   ['Pick a storage tool', 'Use Google Sheets, Airtable, Notion, or a database table to store role, company, source, URL, and status.'],
@@ -1034,6 +1050,28 @@ function WorkflowsPage() {
               <p>{text}</p>
             </article>
           ))}
+        </section>
+        <section className="source-workflow-guide">
+          <div className="section-title">
+            <div>
+              <strong>How each job source fits into the workflow</strong>
+              <span>Use official search links for job boards; only connect public APIs where the source explicitly permits it. Every application remains user-approved.</span>
+            </div>
+          </div>
+          <div className="source-workflow-grid">
+            {thirdPartyWorkflowSteps.map(([source, method, steps, bestFor]) => (
+              <article key={source}>
+                <div>
+                  <strong>{source}</strong>
+                  <span>{method}</span>
+                </div>
+                <ol>
+                  {steps.map((step) => <li key={step}>{step}</li>)}
+                </ol>
+                <p><b>Best for:</b> {bestFor}</p>
+              </article>
+            ))}
+          </div>
         </section>
         <section className="beginner-workflow">
           <div>
