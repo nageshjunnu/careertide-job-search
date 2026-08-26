@@ -65,6 +65,8 @@ const sourceSearchLinks = [
   ['Remotive', 'https://remotive.com/remote-jobs/search?search={query}', 'Remote API source'],
 ]
 
+const marketReportUrl = 'https://www.weforum.org/publications/the-future-of-jobs-report-2025/digest/'
+
 const categories = [
   ['Software', 'Java, Python, .NET, Node, full-stack roles', '1856'],
   ['Cloud & DevOps', 'AWS, Azure, Docker, Kubernetes roles', '1248'],
@@ -100,6 +102,26 @@ const companyShortcuts = [
 ]
 
 const workflowTemplates = [
+  {
+    name: 'Daily Job Search Operating Routine',
+    platform: 'n8n / Sheets / Email',
+    description: 'A practical daily loop: discover jobs, review the shortlist, apply deliberately, and prepare tomorrow’s follow-ups.',
+    json: {
+      workflowName: 'careertide_daily_job_search_routine',
+      schedule: 'weekdays at 08:00 and 17:30',
+      safetyMode: 'manual_application_approval',
+      dailyRoutine: [
+        { time: '08:00', action: 'collect_new_jobs_from_allowed_sources_and_official_search_links' },
+        { time: '08:10', action: 'deduplicate_and_rank_by_role_location_experience_and_salary' },
+        { time: '08:20', action: 'send_top_10_jobs_to_review_queue' },
+        { time: '12:00', action: 'user_reviews_and_opens_original_apply_pages' },
+        { time: '17:30', action: 'update_applied_skipped_and_follow_up_statuses' },
+        { time: '17:35', action: 'create_next_day_follow_up_reminders' },
+      ],
+      trackerFields: ['title', 'company', 'source', 'applyUrl', 'matchScore', 'status', 'nextActionDate'],
+      output: 'daily_shortlist_and_follow_up_queue',
+    },
+  },
   {
     name: 'Daily Multi-Source Job Discovery',
     platform: 'n8n / Make / Zapier',
@@ -281,6 +303,103 @@ const workflowTemplates = [
   },
 ]
 
+const alternativePlatformWorkflows = [
+  {
+    name: 'Daily Discovery Scenario',
+    platform: 'Make',
+    description: 'A Make scenario blueprint for scheduled discovery, scoring, and a concise daily email.',
+    json: {
+      scenarioName: 'careertide_daily_discovery',
+      trigger: { module: 'Scheduler', frequency: 'daily', time: '08:00' },
+      modules: [
+        { app: 'HTTP', action: 'get', purpose: 'read_permitted_public_job_api_or_source_feed' },
+        { app: 'Tools', action: 'deduplicate_and_score', fields: ['title', 'company', 'location', 'experience'] },
+        { app: 'Google Sheets', action: 'add_or_update_row', sheet: 'Job Tracker' },
+        { app: 'Gmail', action: 'send_email', template: 'daily_shortlist' },
+      ],
+      manualStep: 'Review source links before opening an application',
+    },
+  },
+  {
+    name: 'Approved Job Alert Zap',
+    platform: 'Zapier',
+    description: 'A Zapier blueprint that alerts you only when a saved job meets the score threshold.',
+    json: {
+      zapName: 'careertide_approved_job_alert',
+      trigger: { app: 'Google Sheets', event: 'New or Updated Spreadsheet Row', sheet: 'Job Tracker' },
+      filters: [
+        { field: 'matchScore', condition: 'greater_than_or_equal_to', value: 75 },
+        { field: 'status', condition: 'equals', value: 'saved' },
+      ],
+      actions: [
+        { app: 'Slack', event: 'Send Channel Message', message: 'Review {{title}} at {{company}}: {{applyUrl}}' },
+        { app: 'Google Sheets', event: 'Update Row', values: { status: 'review_notified' } },
+      ],
+      manualStep: 'Approve the job, then open the original application URL yourself',
+    },
+  },
+  {
+    name: 'Airtable Application Pipeline',
+    platform: 'Airtable Automations',
+    description: 'An Airtable automation blueprint for tracking applications, interviews, and follow-ups.',
+    json: {
+      automationName: 'careertide_follow_up_due',
+      trigger: { type: 'record_matches_conditions', table: 'Applications', conditions: ['status = applied', 'nextFollowUpDate = today'] },
+      actions: [
+        { type: 'create_record', table: 'Tasks', fields: { task: 'Follow up with {{company}}', application: '{{recordId}}' } },
+        { type: 'send_email', recipient: '{{userEmail}}', subject: 'Follow-up due: {{company}}' },
+        { type: 'update_record', table: 'Applications', fields: { status: 'follow_up_due' } },
+      ],
+      fields: ['title', 'company', 'source', 'applyUrl', 'status', 'nextFollowUpDate'],
+    },
+  },
+  {
+    name: 'Spreadsheet Daily Summary Script',
+    platform: 'Google Apps Script',
+    description: 'A Google Apps Script configuration for a daily shortlist and overdue-follow-up summary.',
+    json: {
+      projectName: 'CareerTideDailySummary',
+      trigger: { type: 'timeDriven', schedule: 'everyWeekday', time: '18:00' },
+      spreadsheet: { name: 'Job Tracker', sheets: ['Jobs', 'Applications', 'Follow-ups'] },
+      process: [
+        'read_rows_with_status_saved_or_applied',
+        'find_followUps_due_today',
+        'group_jobs_by_source_and_matchScore',
+        'email_daily_summary_to_user',
+      ],
+      manualStep: 'Use the summary to decide your next applications; do not submit applications automatically',
+    },
+  },
+]
+
+const platformLearning = {
+  n8n: {
+    steps: ['Copy the JSON as a workflow blueprint.', 'Create a Schedule Trigger, then add one node for each listed action.', 'Connect your tracker and notification credentials, then test with two sample jobs.', 'Activate only after the user-review step works correctly.'],
+    videoUrl: 'https://www.youtube.com/live/4cQWJViybAQ',
+    videoLabel: 'Watch n8n quick-start video',
+  },
+  Make: {
+    steps: ['Create a new scenario and add the listed apps as modules.', 'Map output fields such as title, company, source URL, and status between modules.', 'Run once with sample data, then schedule the scenario.', 'Keep the final application-opening step manual.'],
+    videoUrl: 'https://www.youtube.com/results?search_query=Make+official+beginner+scenario+tutorial',
+    videoLabel: 'Find Make beginner videos',
+  },
+  Zapier: {
+    steps: ['Create a new Zap and choose the trigger shown in the JSON.', 'Add the filters before any notification or update action.', 'Map the job fields into Slack, email, or your tracker.', 'Test the Zap with a saved job before publishing it.'],
+    videoUrl: 'https://www.youtube.com/results?search_query=Zapier+official+beginner+tutorial',
+    videoLabel: 'Find Zapier beginner videos',
+  },
+  Airtable: {
+    steps: ['Create the Applications and Tasks tables with the listed fields.', 'Build an Automation using the trigger conditions in the JSON.', 'Add each follow-up action and map record fields.', 'Test with one sample application before turning it on.'],
+    videoUrl: 'https://www.youtube.com/results?search_query=Airtable+official+automation+tutorial',
+    videoLabel: 'Find Airtable automation videos',
+  },
+  Google: {
+    steps: ['Open Extensions → Apps Script from the job-tracker spreadsheet.', 'Create a time-driven trigger using the schedule in the JSON.', 'Use the process list as the order for reading, grouping, and emailing data.', 'Run once with sample rows and check the email output.'],
+    videoUrl: 'https://www.youtube.com/results?search_query=Google+Apps+Script+beginner+tutorial+spreadsheet',
+    videoLabel: 'Find Apps Script videos',
+  },
+}
+
 const workflowProcess = [
   ['1', 'Choose search rules', 'Set role keywords, locations, experience, preferred sources, and daily limits.'],
   ['2', 'Collect source links', 'Generate safe source URLs and fetch allowed public APIs where available.'],
@@ -304,6 +423,14 @@ const thirdPartyWorkflowSteps = [
   ['Remote OK', 'Official search link', ['Build a remote role search URL.', 'Verify timezone, location eligibility, and remote requirements.', 'Save strong matches and open the source application manually.'], 'Remote-only job discovery'],
   ['Remotive', 'Public API or official search', ['Use the permitted public API or official search page for matching remote roles.', 'Normalize the role, company, tags, and application URL.', 'Deduplicate, score, and notify the user about high-quality matches.'], 'Automated remote-job intake'],
 ] as const
+
+const sourceShortcutGuides = thirdPartyWorkflowSteps.map(([source, method, steps, bestFor]) => ({
+  source,
+  method,
+  steps,
+  bestFor,
+  duration: '45 sec',
+}))
 
 const beginnerWorkflowSteps = [
   ['Start simple', 'Create one workflow for daily discovery first. Do not automate applying until tracking works.'],
@@ -341,7 +468,7 @@ const workflowTutorials = [
 ]
 
 const roleFamilies = ['All', 'Technology', 'HR / Recruiting', 'Sales', 'Marketing', 'Finance', 'Operations', 'Support', 'Design', 'Product']
-const experienceFilters = ['All', '0 - 3 years', '1 - 4 years', '3 - 6 years', '6+ years']
+const experienceFilters = ['All', '0 - 1 years', '0 - 3 years', '1 - 4 years', '3 - 6 years', '6+ years']
 const locationFilters = ['All', 'Current location', 'Remote']
 const salaryFilters = ['All', 'Salary shown', 'Not disclosed']
 const dateFilters = ['All', 'Today', 'This week']
@@ -374,7 +501,14 @@ const relativeDate = (dateValue: string) => {
   return `${Math.round(days / 30)} month ago`
 }
 
-const sourceRedirectJobs = (query: string, location: string): Job[] => {
+const experienceLabel = (experience: string) => ({
+  '0-1': '0 - 1 years',
+  '0-3': '0 - 3 years',
+  '3-6': '3 - 6 years',
+  '6+': '6+ years',
+}[experience] ?? 'Any experience')
+
+const sourceRedirectJobs = (query: string, location: string, experience = '0-3'): Job[] => {
   const cleanQuery = query.trim() || 'Software Developer'
   const lower = cleanQuery.toLowerCase()
   const isAi = lower.includes('llm') || lower.includes('ai') || lower.includes('machine')
@@ -391,35 +525,36 @@ const sourceRedirectJobs = (query: string, location: string): Job[] => {
   const isSupport = lower.includes('support') || lower.includes('customer') || lower.includes('bpo') || lower.includes('voice')
   const isDesign = lower.includes('design') || lower.includes('ui') || lower.includes('ux') || lower.includes('figma')
   const isProduct = lower.includes('product manager') || lower.includes('project manager') || lower.includes('scrum')
-  const baseTitle = isCloud
-    ? 'Cloud & DevOps Engineer'
+  const roleWord = isCloud
+    ? 'Engineer'
     : isData
-      ? 'Data Analytics Specialist'
+      ? 'Specialist'
       : isSecurity
-        ? 'Cybersecurity Analyst'
+        ? 'Analyst'
         : isRecruiting
-          ? 'HR & Talent Acquisition Specialist'
+          ? 'Specialist'
           : isSales
-            ? 'Sales & Business Development Executive'
+            ? 'Executive'
             : isMarketing
-              ? 'Marketing & Growth Specialist'
+              ? 'Specialist'
               : isFinance
-                ? 'Finance & Accounts Executive'
+                ? 'Executive'
                 : isOperations
-                  ? 'Operations Coordinator'
+                  ? 'Coordinator'
                   : isSupport
-                    ? 'Customer Support Specialist'
+                    ? 'Specialist'
                     : isDesign
-                      ? 'UI/UX Designer'
+                      ? 'Designer'
                       : isProduct
-                        ? 'Product / Project Manager'
+                        ? 'Manager'
                         : isAi
-                          ? 'AI / Machine Learning Engineer'
-                          : isReact
-                            ? 'Frontend Application Developer'
-                            : isBackend
-                              ? 'Backend Software Engineer'
-                              : `${cleanQuery} Professional`
+                          ? 'Engineer'
+                          : isReact || isBackend
+                            ? 'Developer'
+                            : 'Professional'
+  const baseTitle = /developer|engineer|analyst|specialist|manager|designer|executive|coordinator/i.test(cleanQuery)
+    ? cleanQuery
+    : `${cleanQuery} ${roleWord}`
   const companies = [
     'Naukri Search Results',
     'LinkedIn Hiring Network',
@@ -442,7 +577,7 @@ const sourceRedirectJobs = (query: string, location: string): Job[] => {
     company: companies[index],
     companyLogo: '',
     location: source.includes('Remote') || source === 'Remote OK' ? 'Remote' : location || 'Hyderabad',
-    experience: index < 2 ? '0 - 3 years' : index < 4 ? '1 - 4 years' : '3 - 6 years',
+    experience: experienceLabel(experience),
     salary: index % 2 === 0 ? '₹3L - ₹9L' : 'Not disclosed',
     posted: index < 3 ? 'Today' : `${index} days ago`,
     employmentType: source.includes('Remote') || source === 'Remote OK' ? 'Remote' : index % 2 === 0 ? 'Full Time' : 'Hybrid',
@@ -491,7 +626,12 @@ function RoutedApp() {
   const [locationFilter, setLocationFilter] = useState('All')
   const [salaryFilter, setSalaryFilter] = useState('All')
   const [dateFilter, setDateFilter] = useState('All')
-  const [jobs, setJobs] = useState<Job[]>(sourceRedirectJobs('Java Python AWS', 'Hyderabad Secunderabad'))
+  const [submittedSearch, setSubmittedSearch] = useState({
+    query: 'Java Python AWS',
+    location: 'Hyderabad Secunderabad',
+    experience: '0-3',
+  })
+  const [jobs, setJobs] = useState<Job[]>(sourceRedirectJobs('Java Python AWS', 'Hyderabad Secunderabad', '0-3'))
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState('Showing source-matched fallback jobs. Search loads third-party remote jobs.')
   const [lastSearch, setLastSearch] = useState('Java Python AWS · Hyderabad Secunderabad · 0-3 years')
@@ -503,12 +643,12 @@ function RoutedApp() {
     const loadJobs = async () => {
       setLoading(true)
       try {
-        const response = await fetch(`https://remotive.com/api/remote-jobs?search=${encode(query)}`, {
+        const response = await fetch(`https://remotive.com/api/remote-jobs?search=${encode(submittedSearch.query)}`, {
           signal: controller.signal,
         })
         if (!response.ok) throw new Error('Remote jobs API unavailable')
         const data = (await response.json()) as { jobs?: RemotiveJob[] }
-        const queryTokens = query
+        const queryTokens = submittedSearch.query
           .toLowerCase()
           .split(/[\s,]+/)
           .filter((token) => token.length > 1)
@@ -525,7 +665,7 @@ function RoutedApp() {
           company: job.company_name,
           companyLogo: job.company_logo ?? '',
           location: job.candidate_required_location || 'Remote',
-          experience,
+          experience: experienceLabel(submittedSearch.experience),
           salary: job.salary || 'Not disclosed',
           posted: relativeDate(job.publication_date),
           employmentType: job.job_type || 'Remote',
@@ -534,10 +674,10 @@ function RoutedApp() {
           tags: (job.tags ?? []).slice(0, 5),
           remote: true,
         }))
-        setJobs([...sourceRedirectJobs(query, location), ...remoteJobs])
+        setJobs([...sourceRedirectJobs(submittedSearch.query, submittedSearch.location, submittedSearch.experience), ...remoteJobs])
         setStatus(remoteJobs.length ? 'Showing all source redirects plus live third-party jobs from Remotive.' : 'Showing all source redirects for this search.')
       } catch {
-        setJobs(sourceRedirectJobs(query, location))
+        setJobs(sourceRedirectJobs(submittedSearch.query, submittedSearch.location, submittedSearch.experience))
         setStatus('Showing all source redirects. Third-party API could not be loaded.')
       } finally {
         setLoading(false)
@@ -549,7 +689,7 @@ function RoutedApp() {
       controller.abort()
       window.clearTimeout(timer)
     }
-  }, [query, location, experience])
+  }, [submittedSearch])
 
   const filteredJobs = useMemo(
     () =>
@@ -575,7 +715,7 @@ function RoutedApp() {
         const locationMatches =
           locationFilter === 'All' ||
           (locationFilter === 'Remote' && job.remote) ||
-          (locationFilter === 'Current location' && job.location.toLowerCase().includes(location.split(' ')[0].toLowerCase()))
+          (locationFilter === 'Current location' && job.location.toLowerCase().includes(submittedSearch.location.split(' ')[0].toLowerCase()))
         const salaryMatches =
           salaryFilter === 'All' ||
           (salaryFilter === 'Salary shown' && job.salary !== 'Not disclosed') ||
@@ -583,16 +723,18 @@ function RoutedApp() {
         const dateMatches = dateFilter === 'All' || (dateFilter === 'Today' && job.posted === 'Today') || (dateFilter === 'This week' && (job.posted === 'Today' || /[1-7] days ago/.test(job.posted)))
         return sourceMatches && typeMatches && roleMatches && experienceMatches && locationMatches && salaryMatches && dateMatches
       }),
-    [jobs, sourceFilter, jobType, roleFamily, experienceFilter, locationFilter, salaryFilter, dateFilter, location],
+    [jobs, sourceFilter, jobType, roleFamily, experienceFilter, locationFilter, salaryFilter, dateFilter, submittedSearch.location],
   )
 
   const sourceOptions = ['All', ...Array.from(new Set(jobs.map((job) => job.source)))]
   const tags = Array.from(new Set(jobs.flatMap((job) => job.tags))).slice(0, 10)
   const runSearch = () => {
-    setLastSearch(`${query || 'Any role'} · ${location || 'Any location'} · ${experience || 'Any experience'} years`)
+    setSubmittedSearch({ query, location, experience })
+    setExperienceFilter(experienceLabel(experience))
+    setLastSearch(`${query || 'Any role'} · ${location || 'Any location'} · ${experienceLabel(experience)}`)
     setSearchCount((count) => count + 1)
     setStatus('Search triggered. Refreshing matching jobs and source links...')
-    navigate('/jobs')
+    navigate('/jobs#results')
   }
 
   const setPage = (page: Page) => navigate(pagePaths[page])
@@ -829,6 +971,14 @@ function HomePage(props: {
           </div>
           <button onClick={() => props.setPage('jobs')} type="button">View all jobs</button>
         </div>
+        <section className="market-pulse">
+          <div>
+            <span>Career market pulse</span>
+            <h2>AI is changing how work gets done—not removing the need for strong people.</h2>
+            <p>AI, data, cloud, and cybersecurity skills are growing in importance, while problem-solving, communication, and domain knowledge remain essential.</p>
+          </div>
+          <a href={marketReportUrl} rel="noreferrer" target="_blank">Read the global skills outlook →</a>
+        </section>
         <div className="home-jobs-grid">
           {props.filteredJobs.slice(0, 6).map((job) => <CompactJobCard job={job} key={job.id} />)}
         </div>
@@ -893,6 +1043,11 @@ function JobsPage(props: {
     setCurrentPage(1)
   }, [props.filteredJobs.length, props.sourceFilter, props.jobType, props.roleFamily, props.experienceFilter, props.locationFilter, props.salaryFilter, props.dateFilter, props.searchCount])
 
+  useEffect(() => {
+    if (window.location.hash !== '#results') return
+    window.requestAnimationFrame(() => document.getElementById('results')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  }, [props.searchCount])
+
   return (
     <>
       <PageHero title="Job List" crumb="Home › Jobs › Unified Search" />
@@ -900,9 +1055,9 @@ function JobsPage(props: {
         <SearchBand {...props} />
         <section className="content">
           <div className="left">
-            <div className="results-header">
+            <div className="results-header" id="results">
               <div>
-                <strong>{props.loading ? 'Loading jobs...' : `Showing ${props.filteredJobs.length} results`}</strong>
+                <strong>{props.loading ? 'Finding jobs for you...' : `${props.filteredJobs.length} jobs found for you`}</strong>
                 <p>{props.status}</p>
                 <p className="last-search">Last search: {props.lastSearch}</p>
               </div>
@@ -916,6 +1071,10 @@ function JobsPage(props: {
                 value={sortBy}
                 onChange={setSortBy}
               />
+            </div>
+            <div className="results-help">
+              <span>What to do next</span>
+              <p>Read the role details, check the market guidance, then use <b>Apply on source</b> to open the original job board. Save only the jobs you want to apply for.</p>
             </div>
             <div className="job-list">
               {visibleJobs.map((job, index) => <JobCard job={job} index={index} key={job.id} />)}
@@ -1025,6 +1184,7 @@ function SourcesPage({ query, location, setQuery, setPage }: { query: string; lo
 function WorkflowsPage() {
   const [copied, setCopied] = useState('')
   const [activeTutorial, setActiveTutorial] = useState(0)
+  const [activeSourceGuide, setActiveSourceGuide] = useState(0)
 
   const copyWorkflow = async (name: string, json: object) => {
     await navigator.clipboard.writeText(JSON.stringify(json, null, 2))
@@ -1123,6 +1283,43 @@ function WorkflowsPage() {
             </div>
           </div>
         </section>
+        <section className="source-shortcut-tutorial">
+          <div className="section-title">
+            <div>
+              <strong>Shortcut walkthrough for every source</strong>
+              <span>Select a source for a short visual guide: generate the official shortcut, review the result, then save only approved jobs.</span>
+            </div>
+          </div>
+          <div className="source-shortcut-layout">
+            <div className="tutorial-player source-shortcut-player">
+              <div className="play-orb">▶</div>
+              <span>{sourceShortcutGuides[activeSourceGuide].duration} visual walkthrough</span>
+              <h2>{sourceShortcutGuides[activeSourceGuide].source} shortcut workflow</h2>
+              <p><b>Use:</b> {sourceShortcutGuides[activeSourceGuide].method} · <b>Best for:</b> {sourceShortcutGuides[activeSourceGuide].bestFor}</p>
+              <div className="video-timeline">
+                {sourceShortcutGuides[activeSourceGuide].steps.map((step, index) => (
+                  <div className="video-step" key={step}>
+                    <em>{index + 1}</em>
+                    <p>{step}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="source-shortcut-options">
+              {sourceShortcutGuides.map((guide, index) => (
+                <button
+                  className={activeSourceGuide === index ? 'active' : ''}
+                  key={guide.source}
+                  onClick={() => setActiveSourceGuide(index)}
+                  type="button"
+                >
+                  <strong>{guide.source}</strong>
+                  <span>{guide.duration} guide</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
         <section className="usefulness-grid">
           <div className="section-title">
             <div>
@@ -1170,14 +1367,65 @@ function WorkflowsPage() {
                 </button>
               </div>
               <pre>{JSON.stringify(workflow.json, null, 2)}</pre>
+              <WorkflowHowToUse platform={workflow.platform} />
             </article>
           ))}
+        </section>
+        <section className="alternative-workflows">
+          <div className="section-title">
+            <div>
+              <strong>Other automation-platform JSON blueprints</strong>
+              <span>Use the workflow matching your tool. These are platform-specific setup blueprints—not n8n-only templates.</span>
+            </div>
+          </div>
+          <div className="workflow-grid">
+            {alternativePlatformWorkflows.map((workflow) => (
+              <article className="workflow-card" key={workflow.name}>
+                <div className="workflow-head">
+                  <div>
+                    <span>{workflow.platform}</span>
+                    <h2>{workflow.name}</h2>
+                    <p>{workflow.description}</p>
+                  </div>
+                  <button className="copy-button" onClick={() => copyWorkflow(workflow.name, workflow.json)} type="button">
+                    {copied === workflow.name ? 'Copied ✓' : 'Copy JSON'}
+                  </button>
+                </div>
+                <pre>{JSON.stringify(workflow.json, null, 2)}</pre>
+                <WorkflowHowToUse platform={workflow.platform} />
+              </article>
+            ))}
+          </div>
         </section>
         <div className="workflow-note">
           <strong>Important:</strong> Use these workflows to discover, shortlist, track, and open source apply pages. Fully automated mass-applying can violate platform rules and reduce application quality, so this app keeps user approval in the flow.
         </div>
       </main>
     </>
+  )
+}
+
+function WorkflowHowToUse({ platform }: { platform: string }) {
+  const learning = platform.includes('Make')
+    ? platformLearning.Make
+    : platform.includes('Zapier')
+      ? platformLearning.Zapier
+      : platform.includes('Airtable')
+        ? platformLearning.Airtable
+        : platform.includes('Google Apps Script')
+          ? platformLearning.Google
+          : platformLearning.n8n
+
+  return (
+    <div className="workflow-how-to-use">
+      <div>
+        <strong>How to use this JSON</strong>
+        <a href={learning.videoUrl} rel="noreferrer" target="_blank">▶ {learning.videoLabel}</a>
+      </div>
+      <ol>
+        {learning.steps.map((step) => <li key={step}>{step}</li>)}
+      </ol>
+    </div>
   )
 }
 
@@ -1191,6 +1439,7 @@ function PageHero({ title, crumb }: { title: string; crumb: string }) {
 }
 
 function CompactJobCard({ job }: { job: Job }) {
+  const insight = getMarketInsight(job)
   return (
     <article className="compact-job">
       <div className="logo">{job.companyLogo ? <img src={job.companyLogo} alt="" /> : initials(job.company)}</div>
@@ -1199,11 +1448,13 @@ function CompactJobCard({ job }: { job: Job }) {
       <span>{job.employmentType} · {job.posted}</span>
       <div>{job.tags.slice(0, 3).map((tag) => <em key={`${job.id}-${tag}`}>{tag}</em>)}</div>
       <strong>{job.salary}</strong>
+      <p className="compact-market-signal"><b>{insight.demand}</b> · {insight.aiShort}</p>
     </article>
   )
 }
 
 function JobCard({ job, index }: { job: Job; index: number }) {
+  const insight = getMarketInsight(job)
   return (
     <article className="job-card">
       <div className="corner">{job.source.slice(0, 2).toUpperCase()}</div>
@@ -1214,6 +1465,8 @@ function JobCard({ job, index }: { job: Job; index: number }) {
           <a href={job.sourceUrl} target="_blank" rel="noreferrer" className="job-title">{job.title}</a>
           <p>{job.company}</p>
         </div>
+      </div>
+      <div className="job-details" aria-label="Job details">
         <div className="job-location"><span className="mini-icon location-icon" />{job.location}</div>
         <div className="job-time"><span className="mini-icon time-icon" />{job.posted}</div>
         <div className="job-tags">
@@ -1222,13 +1475,48 @@ function JobCard({ job, index }: { job: Job; index: number }) {
         </div>
       </div>
       <div className="job-footer">
-        <span>Experience : {job.experience}</span>
-        <span>{job.salary}</span>
+        <div className="job-footer-meta">
+          <span><b>Experience</b>{job.experience}</span>
+          <span><b>Salary</b>{job.salary}</span>
+        </div>
         <a href={job.sourceUrl} target="_blank" rel="noreferrer">Apply on {job.source} »</a>
+      </div>
+      <div className="job-market-insight">
+        <div>
+          <span>Market situation</span>
+          <strong>{insight.demand}</strong>
+          <p>{insight.market}</p>
+        </div>
+        <div>
+          <span>With AI</span>
+          <p>{insight.withAi}</p>
+        </div>
+        <div>
+          <span>Without AI</span>
+          <p>{insight.withoutAi}</p>
+        </div>
+        <small>Role-based guidance, not live local hiring data.</small>
       </div>
       {index % 3 === 0 && <span className="featured">Radar match</span>}
     </article>
   )
+}
+
+function getMarketInsight(job: Job) {
+  const role = `${job.title} ${job.tags.join(' ')}`.toLowerCase()
+  if (/ai|machine learning|data scientist|data analyst|analytics/.test(role)) {
+    return { demand: 'Strong demand signal', market: 'Data and AI skills are widely requested, but employers still look for real business impact.', withAi: 'AI helps you analyse faster; show that you can check results and explain decisions.', withoutAi: 'Build SQL, statistics, dashboards, and domain knowledge to stand out.', aiShort: 'AI plus data judgement is valuable' }
+  }
+  if (/cloud|devops|aws|azure|kubernetes|security|cyber/.test(role)) {
+    return { demand: 'Steady-to-strong demand signal', market: 'Teams continue to need reliable systems, security, and automation skills.', withAi: 'AI can speed up troubleshooting; employers still need safe reviews and production ownership.', withoutAi: 'Strong fundamentals in infrastructure, monitoring, security, and incident handling matter.', aiShort: 'AI speeds work; ownership still matters' }
+  }
+  if (/frontend|react|angular|vue|full.?stack|software|developer|engineer/.test(role)) {
+    return { demand: 'Selective demand signal', market: 'Openings remain active, with more focus on practical projects and end-to-end delivery.', withAi: 'Use AI to prototype and test faster, then prove code quality and product judgement.', withoutAi: 'A strong portfolio, core coding skills, debugging, and collaboration remain important.', aiShort: 'AI-assisted delivery is becoming expected' }
+  }
+  if (/recruit|talent|hr/.test(role)) {
+    return { demand: 'Changing demand signal', market: 'Hiring teams value people who combine relationship skills with efficient tools and data.', withAi: 'AI can reduce repetitive screening; human judgement, fairness, and candidate trust remain key.', withoutAi: 'Develop sourcing, interviewing, stakeholder, and process-management strengths.', aiShort: 'AI helps screening; people skills lead' }
+  }
+  return { demand: 'Role-dependent demand signal', market: 'Demand changes by location, company, and your skills—compare several sources before deciding.', withAi: 'AI can speed up routine work; show where you add judgement, quality, and customer value.', withoutAi: 'Clear role fundamentals, communication, and measurable outcomes remain your advantage.', aiShort: 'AI literacy can strengthen your profile' }
 }
 
 function FilterGroup({ title, options, value, onChange }: { title: string; options: string[]; value: string; onChange: (value: string) => void }) {

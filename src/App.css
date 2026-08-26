@@ -8,6 +8,12 @@
   font-size: 13px;
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 .app-frame {
   min-height: 100vh;
 }
@@ -1622,6 +1628,101 @@ footer {
   font-size: 12px;
 }
 
+.job-market-insight {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr 1fr;
+  gap: 14px;
+  padding: 18px 24px 20px 72px;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+  background: rgba(45, 212, 191, 0.04);
+}
+
+.job-market-insight > div {
+  min-width: 0;
+}
+
+.job-market-insight span,
+.market-pulse > div > span {
+  display: block;
+  margin-bottom: 6px;
+  color: #5eead4;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.job-market-insight strong {
+  display: block;
+  color: #fcd34d;
+  font-size: 14px;
+}
+
+.job-market-insight p {
+  margin: 4px 0 0;
+  color: #b8c7e6;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.job-market-insight small {
+  grid-column: 1 / -1;
+  color: #70809d;
+  font-size: 11px;
+}
+
+.compact-market-signal {
+  margin: 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+  padding-top: 12px;
+  color: #91a1bd;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.compact-market-signal b {
+  color: #5eead4;
+}
+
+.market-pulse {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin: -4px 0 24px;
+  padding: 24px;
+  border: 1px solid rgba(45, 212, 191, 0.2);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 92% 20%, rgba(251, 191, 36, 0.15), transparent 28%),
+    rgba(15, 23, 42, 0.72);
+}
+
+.market-pulse h2 {
+  max-width: 700px;
+  margin: 0 0 8px;
+  color: #f8fafc;
+  font-size: 21px;
+}
+
+.market-pulse p {
+  max-width: 720px;
+  margin: 0;
+  color: #b8c7e6;
+  line-height: 1.6;
+}
+
+.market-pulse a {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 11px 14px;
+  color: #06111f;
+  background: linear-gradient(135deg, #2dd4bf, #fbbf24);
+  font-size: 13px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
 .sidebar {
   gap: 18px;
   border: 1px solid rgba(45, 212, 191, 0.16);
@@ -1768,6 +1869,9 @@ footer {
 }
 
 .search-console {
+  position: relative;
+  /* The menu belongs above the results/cards that follow this panel. */
+  z-index: 20;
   margin-bottom: 18px;
   padding: 14px;
   border: 1px solid rgba(45, 212, 191, 0.22);
@@ -2001,6 +2105,38 @@ footer {
   color: #fcd34d !important;
 }
 
+.results-help {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0 0 18px;
+  border: 1px solid rgba(45, 212, 191, 0.18);
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: rgba(45, 212, 191, 0.07);
+}
+
+.results-help span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 5px 8px;
+  color: #06111f;
+  background: #5eead4;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.results-help p {
+  margin: 0;
+  color: #b8c7e6;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.results-help b {
+  color: #f8fafc;
+}
+
 .pagination button:disabled {
   cursor: not-allowed;
   opacity: 0.4;
@@ -2072,6 +2208,10 @@ footer button,
 .workflow-grid {
   display: grid;
   gap: 24px;
+  margin-bottom: 34px;
+}
+
+.alternative-workflows {
   margin-bottom: 34px;
 }
 
@@ -2233,6 +2373,62 @@ footer button,
 
 .tutorial-zone {
   margin-bottom: 34px;
+}
+
+.source-shortcut-tutorial {
+  margin-bottom: 34px;
+}
+
+.source-shortcut-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 410px;
+  gap: 20px;
+}
+
+.source-shortcut-player {
+  min-height: 360px;
+}
+
+.source-shortcut-player > p {
+  margin: -10px 0 22px;
+  color: #b8c7e6;
+  line-height: 1.55;
+}
+
+.source-shortcut-player > p b {
+  color: #fcd34d;
+}
+
+.source-shortcut-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-content: start;
+}
+
+.source-shortcut-options button {
+  display: grid;
+  min-height: 74px;
+  gap: 5px;
+  align-content: center;
+  padding: 14px;
+  text-align: left;
+}
+
+.source-shortcut-options button.active {
+  border-color: rgba(45, 212, 191, 0.44);
+  background:
+    linear-gradient(135deg, rgba(45, 212, 191, 0.18), rgba(251, 191, 36, 0.08)),
+    rgba(15, 23, 42, 0.92);
+}
+
+.source-shortcut-options strong {
+  color: #f8fafc;
+}
+
+.source-shortcut-options span {
+  color: #91a1bd;
+  font-size: 12px;
 }
 
 .tutorial-layout {
@@ -2489,6 +2685,54 @@ footer button,
   line-height: 1.55;
 }
 
+.workflow-how-to-use {
+  display: grid;
+  gap: 14px;
+  padding: 22px 24px 24px;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(15, 23, 42, 0.52);
+}
+
+.workflow-how-to-use > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.workflow-how-to-use strong {
+  color: #f8fafc;
+  font-size: 16px;
+}
+
+.workflow-how-to-use a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  border-radius: 999px;
+  padding: 8px 12px;
+  color: #06111f;
+  background: linear-gradient(135deg, #2dd4bf, #fbbf24);
+  font-size: 12px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.workflow-how-to-use ol {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 22px;
+  color: #b8c7e6;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.workflow-how-to-use li::marker {
+  color: #5eead4;
+  font-weight: 900;
+}
+
 .workflow-note {
   margin-bottom: 72px;
   border: 1px solid rgba(251, 191, 36, 0.22);
@@ -2515,6 +2759,11 @@ footer button,
     padding: 16px 18px;
   }
 
+  .job-market-insight {
+    grid-template-columns: 1fr 1fr;
+    padding: 16px 18px 18px;
+  }
+
   .job-title,
   .job-info p {
     max-width: 100%;
@@ -2524,12 +2773,22 @@ footer button,
     display: grid;
   }
 
+  .workflow-how-to-use > div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .beginner-workflow,
   .tutorial-layout,
+  .source-shortcut-layout,
   .use-case-grid,
   .workflow-link-grid,
   .source-workflow-grid {
     grid-template-columns: 1fr;
+  }
+
+  .source-shortcut-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .workflow-process {
@@ -2577,5 +2836,275 @@ footer button,
 
   .search-console-header {
     display: grid;
+  }
+}
+
+/* Jobs page: phone-first layout and controls. This appears last so it wins
+   over the larger-tablet rules above. */
+@media (max-width: 720px) {
+  .app-frame {
+    overflow-x: hidden;
+  }
+
+  .page-shell {
+    width: min(100% - 24px, 1180px);
+  }
+
+  .search-console-header {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    padding: 4px 2px 14px;
+  }
+
+  .finder-title {
+    min-width: 0;
+    align-items: flex-start;
+  }
+
+  .finder-title small {
+    line-height: 1.45;
+  }
+
+  .finder-status {
+    justify-self: start;
+  }
+
+  .search-row label,
+  .custom-select,
+  .results-header .custom-select {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .content {
+    gap: 20px;
+  }
+
+  .results-header {
+    gap: 14px;
+  }
+
+  .results-help {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .job-body {
+    grid-template-columns: 50px minmax(0, 1fr);
+    gap: 12px;
+    padding: 66px 14px 16px;
+  }
+
+  .job-location,
+  .job-time,
+  .job-tags {
+    grid-column: 1 / -1;
+  }
+
+  .job-info p {
+    white-space: normal;
+  }
+
+  .job-footer {
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .job-footer a {
+    min-height: 42px;
+  }
+
+  .job-market-insight {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 16px 14px 18px;
+  }
+
+  .job-market-insight small {
+    grid-column: auto;
+  }
+
+  .market-pulse {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 16px;
+    padding: 20px;
+  }
+
+  .market-pulse h2 {
+    font-size: 19px;
+  }
+
+  .sidebar {
+    gap: 14px;
+    padding: 12px;
+    border-radius: 20px;
+  }
+
+  .filter-box h3 {
+    padding: 14px;
+  }
+
+  .radio-row {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .select-menu {
+    right: 0;
+    left: 0;
+  }
+}
+
+@media (max-width: 420px) {
+  .search-console {
+    padding: 10px;
+  }
+
+  .finder-mark {
+    width: 40px;
+    height: 40px;
+    border-radius: 13px;
+  }
+
+  .finder-title strong {
+    font-size: 17px;
+  }
+
+  .finder-title small {
+    font-size: 12px;
+  }
+
+  .source-shortcut-options {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Keep filters in normal document flow on phones and small tablets. */
+@media (max-width: 860px) {
+  .content {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "results"
+      "filters";
+    align-items: stretch;
+  }
+
+  .content > .left {
+    grid-area: results;
+    min-width: 0;
+  }
+
+  .content > .sidebar {
+    position: static;
+    z-index: auto;
+    grid-area: filters;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+    min-width: 0;
+  }
+
+  .sidebar .filter-summary,
+  .sidebar .filter-box {
+    min-width: 0;
+  }
+
+  .filter-box:last-child {
+    grid-column: auto;
+  }
+}
+
+/* Clear visual hierarchy for each job result. */
+.job-body {
+  grid-template-columns: 64px minmax(0, 1fr);
+}
+
+.job-details {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 0 24px 20px 72px;
+}
+
+.job-details .job-location,
+.job-details .job-time {
+  min-height: 36px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.job-details .job-tags {
+  flex: 1 1 220px;
+}
+
+.job-footer {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  padding: 16px 24px 16px 72px;
+  border-top: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(6, 17, 31, 0.7);
+}
+
+.job-footer-meta {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.job-footer-meta span {
+  display: grid;
+  gap: 4px;
+  min-width: 130px;
+  padding: 0 18px;
+  color: #d9e5ff;
+  font-size: 13px;
+}
+
+.job-footer-meta span:first-child {
+  padding-left: 0;
+  border-right: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.job-footer-meta b {
+  color: #91a1bd;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 720px) {
+  .job-body {
+    grid-template-columns: 50px minmax(0, 1fr);
+    padding: 66px 14px 16px;
+  }
+
+  .job-details {
+    padding: 0 14px 16px;
+  }
+
+  .job-details .job-tags {
+    flex-basis: 100%;
+  }
+
+  .job-footer {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    padding: 16px 14px;
+  }
+
+  .job-footer-meta {
+    justify-content: space-between;
+  }
+
+  .job-footer-meta span {
+    min-width: 0;
+    flex: 1;
+    padding: 0 12px;
+  }
+
+  .job-footer a {
+    justify-self: stretch;
+    text-align: center;
   }
 }
