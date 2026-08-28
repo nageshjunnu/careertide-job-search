@@ -1,0 +1,26 @@
+import { createContext } from 'react'
+import type { AutomationSettings, AutomationStatus } from '../types/automation'
+import type { TrackedApplication } from '../types/automation'
+
+export type AutomationContextValue = {
+  status: AutomationStatus
+  toggleStatus: () => Promise<void>
+  statusChanging: boolean
+  depositVerified: boolean
+  verifyDeposit: () => void
+  settings: AutomationSettings
+  updateSettings: (settings: Partial<AutomationSettings>) => void
+  saveSettings: () => Promise<void>
+  settingsSaving: boolean
+  applications: TrackedApplication[]
+  metrics: { discovered: number; matched: number; applied: number; interviews: number }
+  runs: Array<{ id: number; status: string; discovered: number; matched: number; error: string | null; startedAt: string }>
+  sourceWorkflows: Array<{ source: string; status: string; detail: string; permissionStatus: string; requestedAt: string | null }>
+  lastRefreshed: Date | null
+  refreshDashboard: () => Promise<void>
+  markApplied: (matchId: number) => Promise<void>
+  requestPlatformIntegration: (source: string) => Promise<void>
+  userName: string
+}
+
+export const AutomationContext = createContext<AutomationContextValue | null>(null)
