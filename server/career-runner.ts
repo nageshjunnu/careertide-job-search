@@ -6,6 +6,8 @@ const escapeHtml = (value: string) => value.replaceAll('&', '&amp;').replaceAll(
 const emailFromDescription = (description?: string) => description?.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0]?.toLowerCase() ?? null
 
 export async function runGuidedSearch(userId: string) {
+  let activeRunId: number | null = null
+  try {
   const configuration = await database.query<{
     roles: string; skills: string; locations: string; minimum_score: number; daily_limit: number;
     sources: string[]; email: string; full_name: string; email_notifications: boolean;
@@ -14,9 +16,12 @@ export async function runGuidedSearch(userId: string) {
       LEFT JOIN notification_preferences n ON n.user_id=u.id WHERE u.id=$1 AND w.status IN ('configured','active')`, [userId])
   const config = configuration.rows[0]
   if (!config) throw new Error('A completed profile and search workflow are required.')
+  const startedRun = await database.query<{ id: number }>(`INSERT INTO career_runs (user_id,status,progress_stage,progress_percent) VALUES ($1,'running','Preparing your saved rules',10) RETURNING id`, [userId])
+  activeRunId = startedRun.rows[0].id
   const query = config.roles.split(',')[0]?.trim() || config.skills.split(',')[0]?.trim() || 'developer'
   // Remotive is currently the only selected source with a permitted public discovery feed.
   // Other sources are retained as separate review workflows and never scraped or falsely marked applied.
+  await database.query(`UPDATE career_runs SET progress_stage='Checking permitted job sources',progress_percent=30 WHERE id=$1`, [activeRunId])
   const payload = config.sources.includes('Remotive')
     ? await fetch(`https://remotive.com/api/remote-jobs?search=${encodeURIComponent(query)}`).then(async (response) => {
       if (!response.ok) throw new Error(`Remotive returned ${response.status}`)
@@ -24,6 +29,7 @@ export async function runGuidedSearch(userId: string) {
     })
     : { jobs: [] }
   const tokens = `${config.roles},${config.skills}`.toLowerCase().split(/[\s,]+/).filter((item) => item.length > 2)
+  await database.query(`UPDATE career_runs SET progress_stage='Matching jobs to your rules',progress_percent=60 WHERE id=$1`, [activeRunId])
   let matched = 0
   let discovered = 0
   for (const job of (payload.jobs ?? []).slice(0, 50)) {
@@ -42,7 +48,7 @@ export async function runGuidedSearch(userId: string) {
       if (matched >= config.daily_limit) break
     }
   }
-  const run = await database.query<{ id: number }>(`INSERT INTO career_runs (user_id,status,jobs_discovered,jobs_matched,finished_at) VALUES ($1,'completed',$2,$3,NOW()) RETURNING id`, [userId, discovered, matched])
+  await database.query(`UPDATE career_runs SET status='completed',jobs_discovered=$2,jobs_matched=$3,progress_stage='Opportunity pipeline updated',progress_percent=100,finished_at=NOW() WHERE id=$1`, [activeRunId, discovered, matched])
   await database.query(`UPDATE career_workflows SET status='active',last_run_at=NOW() WHERE user_id=$1`, [userId])
   await database.query(`UPDATE source_workflows SET last_checked_at=NOW() WHERE user_id=$1 AND source = ANY($2::text[])`, [userId, config.sources])
   if (config.email_notifications) {
@@ -54,5 +60,9 @@ export async function runGuidedSearch(userId: string) {
     const sourceNote = manualSources.length ? `<br><br><strong>Separate source workflows:</strong> ${manualSources.map(escapeHtml).join(', ')} are saved as review-only workflows. No jobs are scraped and no application is submitted on these platforms without their authorised integration.` : ''
     await sendStepEmail(userId, config.email, config.full_name, 'Job search run', `<strong>Jobs checked:</strong> ${discovered}<br><strong>Matches saved:</strong> ${matched}<br><strong>Applications genuinely submitted:</strong> 0<br><br>No application was submitted automatically because the connected source provides discovery links, not an authorized submission API.${sourceNote}${linkList}`)
   }
-  return { runId: run.rows[0].id, discovered, matched, applicationsSubmitted: 0, mode: 'discovery_and_human_review' }
+  return { runId: activeRunId, discovered, matched, applicationsSubmitted: 0, mode: 'discovery_and_human_review' }
+  } catch (error) {
+    if (activeRunId) await database.query(`UPDATE career_runs SET status='failed',progress_stage='Run failed',error_message=$2,finished_at=NOW() WHERE id=$1`, [activeRunId, error instanceof Error ? error.message : 'Unknown error'])
+    throw error
+  }
 }

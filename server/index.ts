@@ -29,9 +29,9 @@ app.get('/api/career/dashboard/:userId', async (request, response, next) => {
   try {
     const matches = await database.query(`SELECT m.id,j.title,j.company,j.source,j.source_url,m.match_score,m.status,m.updated_at,c.contact_email,c.status AS contact_status
       FROM job_matches m JOIN discovered_jobs j ON j.id=m.job_id LEFT JOIN job_contact_checks c ON c.user_id=m.user_id AND c.job_id=m.job_id WHERE m.user_id=$1 ORDER BY m.updated_at DESC`, [request.params.userId])
-    const latestRun = await database.query(`SELECT id,status,jobs_discovered,jobs_matched,error_message,started_at,finished_at
+    const latestRun = await database.query(`SELECT id,status,jobs_discovered,jobs_matched,progress_stage,progress_percent,error_message,started_at,finished_at
       FROM career_runs WHERE user_id=$1 ORDER BY started_at DESC LIMIT 1`, [request.params.userId])
-    const runs = await database.query(`SELECT id,status,jobs_discovered,jobs_matched,error_message,started_at,finished_at
+    const runs = await database.query(`SELECT id,status,jobs_discovered,jobs_matched,progress_stage,progress_percent,error_message,started_at,finished_at
       FROM career_runs WHERE user_id=$1 ORDER BY started_at DESC LIMIT 10`, [request.params.userId])
     const counts = await database.query<{ applied: string; interviews: string }>(`SELECT COUNT(*) FILTER (WHERE status='applied')::text AS applied, COUNT(*) FILTER (WHERE status='interview')::text AS interviews FROM job_matches WHERE user_id=$1`, [request.params.userId])
     const workflow = await database.query<{ status: 'configured' | 'active' | 'paused' }>('SELECT status FROM career_workflows WHERE user_id=$1', [request.params.userId])

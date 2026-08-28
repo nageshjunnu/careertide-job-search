@@ -14,6 +14,7 @@ export function AutomationProvider({ children }: { children: ReactNode }) {
   const [applications, setApplications] = useState<TrackedApplication[]>([])
   const [metrics, setMetrics] = useState({ discovered: 0, matched: 0, applied: 0, interviews: 0 })
   const [runs, setRuns] = useState<Array<{ id: number; status: string; discovered: number; matched: number; error: string | null; startedAt: string }>>([])
+  const [runProgress, setRunProgress] = useState<{ running: boolean; stage: string; percent: number } | null>(null)
   const [sourceWorkflows, setSourceWorkflows] = useState<Array<{ source: string; status: string; detail: string; permissionStatus: string; requestedAt: string | null }>>([])
   const [serverUserId, setServerUserId] = useState('')
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null)
@@ -42,6 +43,7 @@ export function AutomationProvider({ children }: { children: ReactNode }) {
     const dashboard = await setupApi.getDashboard(serverUserId)
     setApplications(dashboard.matches.map(mapDashboardApplication))
     setMetrics({ discovered: dashboard.latestRun?.jobs_discovered ?? 0, matched: dashboard.latestRun?.jobs_matched ?? 0, applied: dashboard.applicationsSubmitted, interviews: dashboard.interviews })
+    setRunProgress(dashboard.latestRun?.status === 'running' ? { running: true, stage: dashboard.latestRun.progress_stage || 'Running your saved rules', percent: dashboard.latestRun.progress_percent } : null)
     setRuns(dashboard.runs.map((run) => ({ id: run.id, status: run.status, discovered: run.jobs_discovered, matched: run.jobs_matched, error: run.error_message, startedAt: run.started_at })))
     setSourceWorkflows(dashboard.sourceWorkflows.map((source) => ({ source: source.source, status: source.status, detail: source.detail, permissionStatus: source.permission_status, requestedAt: source.requested_at })))
     setStatus(dashboard.workflowStatus === 'paused' ? 'paused' : 'active')
@@ -84,6 +86,6 @@ export function AutomationProvider({ children }: { children: ReactNode }) {
     await setupApi.requestPlatformIntegration(serverUserId, source)
     await refreshDashboard()
   }
-  const value = { status, toggleStatus, statusChanging, depositVerified, verifyDeposit: () => setDepositVerified(true), settings, updateSettings, saveSettings, settingsSaving, applications, metrics, runs, sourceWorkflows, lastRefreshed, refreshDashboard, markApplied, requestPlatformIntegration, userName }
+  const value = { status, toggleStatus, statusChanging, depositVerified, verifyDeposit: () => setDepositVerified(true), settings, updateSettings, saveSettings, settingsSaving, applications, metrics, runs, runProgress, sourceWorkflows, lastRefreshed, refreshDashboard, markApplied, requestPlatformIntegration, userName }
   return <AutomationContext.Provider value={value}>{children}</AutomationContext.Provider>
 }
