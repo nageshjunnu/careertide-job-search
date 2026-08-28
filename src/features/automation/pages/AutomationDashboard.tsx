@@ -8,7 +8,7 @@ import { useAutomation } from '../context/useAutomation'
 import '../styles/automation.css'
 
 export function AutomationDashboard() {
-  const { status, toggleStatus, statusChanging, depositVerified, verifyDeposit, settings, updateSettings, saveSettings, settingsSaving, applications, metrics, runs, sourceWorkflows, lastRefreshed, refreshDashboard, markApplied, requestPlatformIntegration, userName } = useAutomation()
+  const { status, toggleStatus, statusChanging, depositVerified, verifyDeposit, settings, updateSettings, saveSettings, settingsSaving, applications, metrics, runs, runProgress, sourceWorkflows, lastRefreshed, refreshDashboard, markApplied, requestPlatformIntegration, userName } = useAutomation()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<'pipeline' | 'activity'>('pipeline')
 
@@ -19,6 +19,7 @@ export function AutomationDashboard() {
         <div><span className="automation-kicker">Career Assistant control center</span><h1>Good morning, {userName} 👋</h1><p>We find and organise relevant opportunities. You handle calls, interviews, and applications that need your approval.</p></div>
         <div className={`automation-live ${status}`}><i /><span><small>Job search status</small><strong>{status === 'active' ? 'Active' : 'Paused'}</strong></span><Button disabled={statusChanging} variant={status === 'active' ? 'secondary' : 'primary'} onClick={() => void toggleStatus()}>{statusChanging ? 'Updating…' : status === 'active' ? 'Pause' : 'Resume'}</Button></div>
       </section>
+      {runProgress && <section className={`live-run-progress ${runProgress.running ? 'running' : 'complete'}`} role="status"><div><span>{runProgress.running ? 'LIVE JOB RUN' : 'LATEST JOB RUN'}</span><strong>{runProgress.stage}</strong><small>{runProgress.running ? 'Rules, match threshold, duplicate checks, and permitted sources are being processed.' : runProgress.status === 'completed' ? 'The database and opportunity pipeline have been updated with the final run status.' : 'The run stopped before completion. Open Run activity for the recorded error.'}</small></div><b>{runProgress.percent}%</b><i><em style={{ width: `${runProgress.percent}%` }} /></i></section>}
 
       <section className="automation-metrics">
         <MetricCard icon="⌕" label="Jobs checked" value={metrics.discovered} trend="Latest genuine source run" />

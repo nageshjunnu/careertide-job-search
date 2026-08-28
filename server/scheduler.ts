@@ -13,7 +13,6 @@ export async function runScheduledSearches() {
   for (const workflow of due.rows) {
     try { await runGuidedSearch(workflow.user_id) } catch (error) {
       console.error('Scheduled guided search failed:', error)
-      await database.query(`INSERT INTO career_runs (user_id,status,error_message,finished_at) VALUES ($1,'failed',$2,NOW())`, [workflow.user_id, error instanceof Error ? error.message : 'Unknown error'])
     }
   }
   return { claimed: due.rows.length }

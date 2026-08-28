@@ -15,7 +15,7 @@ export type AutomationContextValue = {
   applications: TrackedApplication[]
   metrics: { discovered: number; matched: number; applied: number; interviews: number }
   runs: Array<{ id: number; status: string; discovered: number; matched: number; error: string | null; startedAt: string }>
-  runProgress: { running: boolean; stage: string; percent: number } | null
+  runProgress: { running: boolean; status: string; stage: string; percent: number } | null
   sourceWorkflows: Array<{ source: string; status: string; detail: string; permissionStatus: string; requestedAt: string | null }>
   lastRefreshed: Date | null
   refreshDashboard: () => Promise<void>
