@@ -43,7 +43,12 @@ export function AutomationProvider({ children }: { children: ReactNode }) {
     const dashboard = await setupApi.getDashboard(serverUserId)
     setApplications(dashboard.matches.map(mapDashboardApplication))
     setMetrics({ discovered: dashboard.latestRun?.jobs_discovered ?? 0, matched: dashboard.latestRun?.jobs_matched ?? 0, applied: dashboard.applicationsSubmitted, interviews: dashboard.interviews })
-    setRunProgress(dashboard.latestRun ? { running: dashboard.latestRun.status === 'running', status: dashboard.latestRun.status, stage: dashboard.latestRun.progress_stage || (dashboard.latestRun.status === 'completed' ? 'Opportunity pipeline updated' : 'Run status updated'), percent: dashboard.latestRun.progress_percent } : null)
+    setRunProgress((current) => {
+      if (dashboard.latestRun?.status === 'running') return { running: true, status: 'running', stage: dashboard.latestRun.progress_stage || 'Preparing your saved rules', percent: dashboard.latestRun.progress_percent }
+      if (current?.running && dashboard.latestRun?.status === 'completed') return { running: false, status: 'completed', stage: dashboard.latestRun.progress_stage || 'Career intelligence pipeline updated', percent: 100 }
+      if (dashboard.latestRun?.status === 'completed' && dashboard.latestRun.finished_at && Date.now() - new Date(dashboard.latestRun.finished_at).getTime() < 8_000) return { running: false, status: 'completed', stage: dashboard.latestRun.progress_stage || 'Career intelligence pipeline updated', percent: 100 }
+      return null
+    })
     setRuns(dashboard.runs.map((run) => ({ id: run.id, status: run.status, discovered: run.jobs_discovered, matched: run.jobs_matched, error: run.error_message, startedAt: run.started_at })))
     setSourceWorkflows(dashboard.sourceWorkflows.map((source) => ({ source: source.source, status: source.status, detail: source.detail, permissionStatus: source.permission_status, requestedAt: source.requested_at })))
     setStatus(dashboard.workflowStatus === 'paused' ? 'paused' : 'active')
@@ -52,9 +57,14 @@ export function AutomationProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!serverUserId) return
     const initialTimer = window.setTimeout(() => void refreshDashboard(), 0)
-    const timer = window.setInterval(() => void refreshDashboard(), 15_000)
+    const timer = window.setInterval(() => void refreshDashboard(), 2_000)
     return () => { window.clearTimeout(initialTimer); window.clearInterval(timer) }
   }, [serverUserId, refreshDashboard])
+  useEffect(() => {
+    if (runProgress?.status !== 'completed') return
+    const timer = window.setTimeout(() => setRunProgress(null), 2_500)
+    return () => window.clearTimeout(timer)
+  }, [runProgress])
   const toggleStatus = async () => {
     if (!serverUserId || statusChanging) return
     const nextStatus = status === 'active' ? 'paused' : 'active'

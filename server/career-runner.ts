@@ -16,7 +16,7 @@ export async function runGuidedSearch(userId: string) {
       LEFT JOIN notification_preferences n ON n.user_id=u.id WHERE u.id=$1 AND w.status IN ('configured','active')`, [userId])
   const config = configuration.rows[0]
   if (!config) throw new Error('A completed profile and search workflow are required.')
-  const startedRun = await database.query<{ id: number }>(`INSERT INTO career_runs (user_id,status,progress_stage,progress_percent) VALUES ($1,'running','Preparing your saved rules',10) RETURNING id`, [userId])
+  const startedRun = await database.query<{ id: number }>(`INSERT INTO career_runs (user_id,status,progress_stage,progress_percent) VALUES ($1,'running','Preparing your saved rules',0) RETURNING id`, [userId])
   activeRunId = startedRun.rows[0].id
   const query = config.roles.split(',')[0]?.trim() || config.skills.split(',')[0]?.trim() || 'developer'
   // Remotive is currently the only selected source with a permitted public discovery feed.
@@ -48,7 +48,7 @@ export async function runGuidedSearch(userId: string) {
       if (matched >= config.daily_limit) break
     }
   }
-  await database.query(`UPDATE career_runs SET status='completed',jobs_discovered=$2,jobs_matched=$3,progress_stage='Opportunity pipeline updated',progress_percent=100,finished_at=NOW() WHERE id=$1`, [activeRunId, discovered, matched])
+  await database.query(`UPDATE career_runs SET status='completed',jobs_discovered=$2,jobs_matched=$3,progress_stage='Career intelligence pipeline updated',progress_percent=100,finished_at=NOW() WHERE id=$1`, [activeRunId, discovered, matched])
   await database.query(`UPDATE career_workflows SET status='active',last_run_at=NOW() WHERE user_id=$1`, [userId])
   await database.query(`UPDATE source_workflows SET last_checked_at=NOW() WHERE user_id=$1 AND source = ANY($2::text[])`, [userId, config.sources])
   if (config.email_notifications) {
