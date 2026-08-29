@@ -34,17 +34,17 @@ async function completeStep(userId: string, step: string, payload: unknown, emai
 setupRouter.post('/user', async (request, response, next) => {
   try {
     const id = request.body.userId || randomUUID()
-    const { email, fullName, phone, resumeName, roles, skills, locations, experience, service } = request.body
+    const { email, fullName, phone, resumeName, roles, skills, locations, experience, salaryExpectation, service } = request.body
     const phoneDigits = String(phone ?? '').replace(/\D/g, '')
     if (!email || !fullName) return response.status(400).json({ message: 'Full name and email are required.' })
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return response.status(400).json({ message: 'Enter a valid email address.' })
     if (phoneDigits.length < 10 || phoneDigits.length > 15 || /^(\d)\1+$/.test(phoneDigits)) return response.status(400).json({ message: 'Enter a valid mobile number.' })
-    if (!experience || !roles?.trim() || !skills?.trim() || !locations?.trim()) return response.status(400).json({ message: 'Experience, target roles, skills, and locations are required.' })
+    if (!experience || !roles?.trim() || !skills?.trim() || !locations?.trim() || !salaryExpectation?.trim()) return response.status(400).json({ message: 'Experience, target roles, skills, locations, and salary expectation are required.' })
     if (!/\.(pdf|doc|docx)$/i.test(resumeName ?? '')) return response.status(400).json({ message: 'Upload a PDF, DOC, or DOCX resume.' })
     await database.query(`INSERT INTO users (id,email,full_name,phone) VALUES ($1,$2,$3,$4) ON CONFLICT (email) DO UPDATE SET full_name=$3,phone=$4,updated_at=NOW()`, [id, email, fullName, phone || null])
     const found = await database.query<{ id: string }>('SELECT id FROM users WHERE email=$1', [email])
     const userId = found.rows[0].id
-    await database.query(`INSERT INTO career_profiles (user_id,resume_name,roles,skills,locations,experience,service) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(user_id) DO UPDATE SET resume_name=$2,roles=$3,skills=$4,locations=$5,experience=$6,service=$7,updated_at=NOW()`, [userId, resumeName, roles, skills, locations, experience, service])
+    await database.query(`INSERT INTO career_profiles (user_id,resume_name,roles,skills,locations,experience,salary_expectation,service) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(user_id) DO UPDATE SET resume_name=$2,roles=$3,skills=$4,locations=$5,experience=$6,salary_expectation=$7,service=$8,updated_at=NOW()`, [userId, resumeName, roles, skills, locations, experience, salaryExpectation, service])
     const emailResult = await completeStep(userId, 'User profile', request.body, 'Your profile, resume details, preferences, and selected service were saved successfully.')
     response.json({ userId, email: emailResult })
   } catch (error) { next(error) }
@@ -55,8 +55,8 @@ setupRouter.post('/payment', async (request, response, next) => {
     const { userId, paymentId, amount = 1000, mode = 'test' } = request.body
     await database.query(`INSERT INTO payments (user_id,payment_id,amount,mode,status,verified_at) VALUES ($1,$2,$3,$4,'verified',NOW()) ON CONFLICT(payment_id) DO NOTHING`, [userId, paymentId, amount, mode])
     const paymentMessage = mode === 'live'
-      ? 'Congratulations — your activation payment was verified. Complete the remaining setup steps and we will prepare your Career Assistant.'
-      : 'Congratulations — your Razorpay Test Mode activation payment was verified. No real money was charged. Complete the remaining setup steps and we will prepare your Career Assistant.'
+      ? 'Congratulations — your ₹1,000 monthly CareerTide membership payment was verified. Complete the remaining setup steps and we will prepare your Career Assistant.'
+      : 'Congratulations — your ₹1,000 monthly CareerTide membership was verified in Razorpay Test Mode. No real money was charged. Complete the remaining setup steps and we will prepare your Career Assistant.'
     const email = await completeStep(userId, 'Test payment', request.body, paymentMessage)
     // Payment is the only individual onboarding milestone that sends a message.
     // This keeps setup emails useful instead of sending one after every form.

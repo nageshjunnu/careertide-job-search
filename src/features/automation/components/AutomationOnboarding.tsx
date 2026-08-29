@@ -15,7 +15,7 @@ const sourceOptions = [
   { name: 'Wellfound', access: 'Original site sign-in', detail: 'Use the original Wellfound or employer application page until approved access is available.', requiresProviderAccess: true },
 ]
 
-type RazorpayResult = { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }
+type RazorpayResult = { razorpay_order_id?: string; razorpay_subscription_id?: string; razorpay_payment_id: string; razorpay_signature: string }
 type RazorpayCheckout = { open: () => void; on: (event: string, handler: (response: { error: { description: string } }) => void) => void }
 declare global { interface Window { Razorpay?: new (options: Record<string, unknown>) => RazorpayCheckout } }
 
@@ -60,6 +60,7 @@ export function AutomationOnboarding({ onComplete }: { onComplete: () => void })
       if (data.roles.trim().length < 2) return 'Enter at least one target job role.'
       if (data.skills.split(',').filter((skill) => skill.trim().length >= 2).length === 0) return 'Enter at least one relevant skill.'
       if (data.locations.split(',').filter((location) => location.trim().length >= 2).length === 0) return 'Enter at least one preferred location.'
+      if (data.salaryExpectation.trim().length < 2) return 'Enter the candidate’s salary expectation.'
       if (!resumeValid) return 'Upload a PDF, DOC, or DOCX resume before continuing.'
     }
     if (record.currentStep === 1 && !data.paymentId) return 'Complete the test payment to verify activation.'
@@ -76,7 +77,7 @@ export function AutomationOnboarding({ onComplete }: { onComplete: () => void })
     try {
       const stepKey = ONBOARDING_PHASES[record.currentStep].id
       const stepPayloads = [
-        { email: data.email, fullName: data.fullName, phone: data.phone, resumeName: data.resumeName, roles: data.roles, skills: data.skills, locations: data.locations, experience: data.experience, service: data.service },
+        { email: data.email, fullName: data.fullName, phone: data.phone, resumeName: data.resumeName, roles: data.roles, skills: data.skills, locations: data.locations, experience: data.experience, salaryExpectation: data.salaryExpectation, service: data.service },
         { paymentId: data.paymentId },
         { schedule: data.schedule, timezone: data.timezone, sources: data.sources, minimumScore: data.minimumScore, dailyLimit: data.dailyLimit },
         { reviewRequired: data.reviewRequired, retries: data.retries },
@@ -130,7 +131,7 @@ export function AutomationOnboarding({ onComplete }: { onComplete: () => void })
       const order = await setupApi.createPaymentOrder()
       await new Promise<void>((resolve, reject) => {
         if (!window.Razorpay) { reject(new Error('Razorpay Checkout is unavailable.')); return }
-        const checkout = new window.Razorpay({ key: order.keyId, amount: order.amount, currency: order.currency, name: 'CareerTide', description: '₹1,000 refundable activation deposit · Test Mode', order_id: order.orderId, prefill: { name: data.fullName, email: data.email, contact: data.phone }, theme: { color: '#2ed3b7' }, handler: async (result: RazorpayResult) => { try { const verified = await setupApi.verifyRazorpayPayment(result); updateData({ paymentId: verified.paymentId }); resolve() } catch (verificationError) { reject(verificationError) } }, modal: { ondismiss: () => reject(new Error('Test checkout was closed before payment.')) } })
+        const checkout = new window.Razorpay({ key: order.keyId, amount: order.amount, currency: order.currency, name: 'CareerTide', description: '₹1,000 monthly CareerTide membership · Test Mode', subscription_id: order.subscriptionId, prefill: { name: data.fullName, email: data.email, contact: data.phone }, theme: { color: '#2ed3b7' }, handler: async (result: RazorpayResult) => { try { const verified = await setupApi.verifyRazorpayPayment(result); updateData({ paymentId: verified.paymentId }); resolve() } catch (verificationError) { reject(verificationError) } }, modal: { ondismiss: () => reject(new Error('Test checkout was closed before payment.')) } })
         checkout.on('payment.failed', (response) => reject(new Error(response.error.description)))
         checkout.open()
       })
@@ -184,12 +185,13 @@ export function AutomationOnboarding({ onComplete }: { onComplete: () => void })
         <Field label="Target roles"><input value={data.roles} onChange={(event) => updateData({ roles: event.target.value })} /></Field>
         <Field label="Skills"><input value={data.skills} onChange={(event) => updateData({ skills: event.target.value })} /></Field>
         <Field label="Preferred locations"><input value={data.locations} onChange={(event) => updateData({ locations: event.target.value })} /></Field>
+        <Field label="Salary expectation" hint="For example: ₹8–12 LPA or ₹70,000/month."><input value={data.salaryExpectation} onChange={(event) => updateData({ salaryExpectation: event.target.value })} placeholder="₹8–12 LPA" /></Field>
         <Field label="Service"><select value={data.service} onChange={(event) => updateData({ service: event.target.value })}><option value="guided-automation">Guided job search</option><option value="discovery">Job discovery only</option><option value="matching">Matching and alerts</option></select></Field>
         <Field label="Resume" hint="PDF, DOC, or DOCX · maximum 10 MB. Filename/type is checked before saving."><label className={`resume-drop ${resumeCheck}`}><input accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" type="file" onChange={(event) => validateResumeFile(event.target.files?.[0])} /><span>{resumeCheck === 'valid' ? `✓ Resume ready · ${data.resumeName}` : resumeCheck === 'invalid' ? 'Choose a valid resume file' : 'Upload PDF, DOC, or DOCX'}</span></label></Field>
         <p className="resume-disclosure">Current storage saves the file name only. Content-level verification—checking the resume’s name, experience, skills, and fit against a job description—requires secure file upload/storage plus a document-parsing service, which is not connected yet.</p>
       </div>}
 
-      {record.currentStep === 1 && <div className="payment-stage phase-content" key="payment"><div className="test-badge">RAZORPAY TEST MODE · NO REAL CHARGE</div><div className="payment-orb"><span>₹</span></div><h3>Refundable activation deposit</h3><strong>₹1,000</strong><p>Uses Razorpay Test Mode when test keys are configured. Otherwise it remains a clearly labeled local checkout simulation.</p><ul><li>Razorpay test order</li><li>Server signature verification</li><li>Refund eligibility tracking</li></ul>{data.paymentId ? <div className="payment-success">✓ Test payment verified <small>{data.paymentId}</small></div> : <Button className={paying ? 'paying' : ''} disabled={paying} onClick={runTestPayment}>{paying ? 'Opening secure test checkout…' : 'Pay ₹1,000 in test mode'}</Button>}</div>}
+      {record.currentStep === 1 && <div className="payment-stage phase-content" key="payment"><div className="test-badge">RAZORPAY TEST MODE · NO REAL CHARGE</div><div className="payment-orb"><span>₹</span></div><h3>CareerTide monthly membership</h3><strong>₹1,000 / month</strong><p>Your monthly plan gives you access to guided job discovery, matching, and career workflow tools. Test Mode stays clearly simulated until live billing is enabled.</p><ul><li>Recurring Razorpay subscription</li><li>Server signature verification</li><li>Cancel from your payment provider</li></ul>{data.paymentId ? <div className="payment-success">✓ Monthly plan verified <small>{data.paymentId}</small></div> : <Button className={paying ? 'paying' : ''} disabled={paying} onClick={runTestPayment}>{paying ? 'Opening secure test checkout…' : 'Start ₹1,000/month test plan'}</Button>}</div>}
 
       {record.currentStep === 2 && <div className="setup-grid phase-content" key="automation">
         <Field label="Daily schedule"><input type="time" value={data.schedule} onChange={(event) => updateData({ schedule: event.target.value })} /></Field>

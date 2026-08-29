@@ -10,7 +10,7 @@ export const ONBOARDING_PHASES = [
 
 export const DEFAULT_ONBOARDING_DATA: OnboardingData = {
   email: '', fullName: '', phone: '', resumeName: '', roles: 'Frontend Developer', skills: 'React, TypeScript',
-  locations: 'Hyderabad, Remote', experience: '3-6', service: 'guided-automation', paymentId: '',
+  locations: 'Hyderabad, Remote', experience: '3-6', salaryExpectation: '₹8–12 LPA', service: 'guided-automation', paymentId: '',
   schedule: '08:00', timezone: 'Asia/Kolkata', sources: ['Remotive', 'LinkedIn', 'Naukri'], minimumScore: 80, dailyLimit: 25,
   reviewRequired: true, retries: 2, emailNotifications: true, dailySummary: true,
 }

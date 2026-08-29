@@ -52,21 +52,23 @@ app.post('/api/admin/logout', requireAdmin, async (request: AdminRequest, respon
 })
 app.get('/api/admin/overview', requireAdmin, async (_request: AdminRequest, response, next) => {
   try {
-    const [totals, workflow, payments, recentUsers, recentRuns, emails, audits] = await Promise.all([
+    const [totals, workflow, payments, recentUsers, recentRuns, emails, audits, sources, trends] = await Promise.all([
       database.query<{ users: string; profiles: string; matches: string }>(`SELECT (SELECT COUNT(*) FROM users)::text users,(SELECT COUNT(*) FROM career_profiles)::text profiles,(SELECT COUNT(*) FROM job_matches)::text matches`),
       database.query<{ active: string; paused: string; configured: string }>(`SELECT COUNT(*) FILTER (WHERE status='active')::text active,COUNT(*) FILTER (WHERE status='paused')::text paused,COUNT(*) FILTER (WHERE status='configured')::text configured FROM career_workflows`),
       database.query<{ verified: string; amount: string }>(`SELECT COUNT(*) FILTER (WHERE status='verified')::text verified,COALESCE(SUM(amount) FILTER (WHERE status='verified'),0)::text amount FROM payments`),
       database.query(`SELECT u.id,u.full_name,u.email,u.created_at,COALESCE(w.status,'not configured') workflow_status FROM users u LEFT JOIN career_workflows w ON w.user_id=u.id ORDER BY u.created_at DESC LIMIT 6`),
-      database.query(`SELECT r.id,r.status,r.jobs_discovered,r.jobs_matched,r.progress_percent,r.started_at,u.full_name FROM career_runs r JOIN users u ON u.id=r.user_id ORDER BY r.started_at DESC LIMIT 6`),
+      database.query(`SELECT r.id,r.status,r.jobs_discovered,r.jobs_matched,r.progress_percent,r.started_at,u.full_name FROM career_runs r JOIN users u ON u.id=r.user_id ORDER BY r.started_at DESC LIMIT 60`),
       database.query<{ sent: string; failed: string }>(`SELECT COUNT(*) FILTER (WHERE status='sent')::text sent,COUNT(*) FILTER (WHERE status='failed')::text failed FROM email_logs`),
       database.query(`SELECT admin_email,action,target_type,target_id,created_at FROM admin_audit_logs ORDER BY created_at DESC LIMIT 8`),
+      database.query(`SELECT source,COUNT(*)::text candidates,COUNT(*) FILTER (WHERE status='active')::text active FROM source_workflows GROUP BY source ORDER BY COUNT(*) DESC,source ASC`),
+      database.query(`SELECT TRIM(role) label,COUNT(*)::text candidates FROM career_profiles p CROSS JOIN LATERAL regexp_split_to_table(COALESCE(p.roles,''), '\\s*,\\s*') role WHERE TRIM(role) <> '' GROUP BY TRIM(role) ORDER BY COUNT(*) DESC,TRIM(role) ASC LIMIT 6`),
     ])
-    response.json({ totals: totals.rows[0], workflows: workflow.rows[0], payments: payments.rows[0], emails: emails.rows[0], recentUsers: recentUsers.rows, recentRuns: recentRuns.rows, audits: audits.rows })
+    response.json({ totals: totals.rows[0], workflows: workflow.rows[0], payments: payments.rows[0], emails: emails.rows[0], recentUsers: recentUsers.rows, recentRuns: recentRuns.rows, audits: audits.rows, sources: sources.rows, trends: trends.rows })
   } catch (error) { next(error) }
 })
 app.get('/api/admin/users', requireAdmin, async (_request: AdminRequest, response, next) => {
   try {
-    const users = await database.query(`SELECT u.id,u.full_name,u.email,u.phone,u.created_at,p.roles,p.experience,p.locations,COALESCE(w.status,'not configured') workflow_status,w.schedule,w.timezone,COALESCE((SELECT COUNT(*) FROM job_matches m WHERE m.user_id=u.id),0)::int matches FROM users u LEFT JOIN career_profiles p ON p.user_id=u.id LEFT JOIN career_workflows w ON w.user_id=u.id ORDER BY u.created_at DESC`)
+    const users = await database.query(`SELECT u.id,u.full_name,u.email,u.phone,u.created_at,p.roles,p.experience,p.locations,COALESCE(w.status,'not configured') workflow_status,w.schedule,w.timezone,w.daily_limit,w.minimum_score,COALESCE((SELECT COUNT(*) FROM job_matches m WHERE m.user_id=u.id),0)::int matches FROM users u LEFT JOIN career_profiles p ON p.user_id=u.id LEFT JOIN career_workflows w ON w.user_id=u.id ORDER BY u.created_at DESC`)
     response.json({ users: users.rows })
   } catch (error) { next(error) }
 })
@@ -78,6 +80,31 @@ app.patch('/api/admin/users/:userId/workflow', requireAdmin, async (request: Adm
     if (!updated.rows[0]) return response.status(404).json({ message: 'Workflow not found.' })
     await auditAdmin(request.adminEmail!, `workflow_${status}`, 'user', request.params.userId)
     response.json({ updated: true, workflow: updated.rows[0] })
+  } catch (error) { next(error) }
+})
+app.patch('/api/admin/users/:userId/rules', requireAdmin, async (request: AdminRequest, response, next) => {
+  try {
+    const { schedule, timezone, dailyLimit, minimumScore, locations } = request.body as { schedule?: string; timezone?: string; dailyLimit?: number; minimumScore?: number; locations?: string }
+    if (!schedule || !/^\d{2}:\d{2}$/.test(schedule) || !timezone || !Number.isInteger(dailyLimit) || dailyLimit < 1 || dailyLimit > 100 || !Number.isInteger(minimumScore) || minimumScore < 50 || minimumScore > 100 || !locations?.trim()) return response.status(400).json({ message: 'Enter a valid schedule, time zone, daily limit, match score, and location.' })
+    const client = await database.connect()
+    try {
+      await client.query('BEGIN')
+      const workflow = await client.query('UPDATE career_workflows SET schedule=$2,timezone=$3,daily_limit=$4,minimum_score=$5,last_run_at=NULL,updated_at=NOW() WHERE user_id=$1 RETURNING user_id', [request.params.userId, schedule, timezone, dailyLimit, minimumScore])
+      if (!workflow.rows[0]) { await client.query('ROLLBACK'); return response.status(404).json({ message: 'Workflow not found.' }) }
+      await client.query('UPDATE career_profiles SET locations=$2,updated_at=NOW() WHERE user_id=$1', [request.params.userId, locations.trim()])
+      await client.query('COMMIT')
+      await auditAdmin(request.adminEmail!, 'workflow_rules_updated', 'user', request.params.userId, { schedule, timezone, dailyLimit, minimumScore, locations })
+      response.json({ updated: true })
+    } catch (error) { await client.query('ROLLBACK'); throw error } finally { client.release() }
+  } catch (error) { next(error) }
+})
+app.delete('/api/admin/users/:userId', requireAdmin, async (request: AdminRequest, response, next) => {
+  try {
+    const target = await database.query<{ email: string }>('SELECT email FROM users WHERE id=$1', [request.params.userId])
+    if (!target.rows[0]) return response.status(404).json({ message: 'Candidate not found.' })
+    await database.query('DELETE FROM users WHERE id=$1', [request.params.userId])
+    await auditAdmin(request.adminEmail!, 'candidate_deleted', 'user', request.params.userId, { email: target.rows[0].email })
+    response.json({ deleted: true })
   } catch (error) { next(error) }
 })
 app.use('/api/setup', setupRouter)
@@ -151,21 +178,22 @@ app.patch('/api/career/matches/:matchId/status', async (request, response, next)
   } catch (error) { next(error) }
 })
 app.get('/api/email/status', async (_request, response) => response.json(await verifyEmailConfiguration()))
-app.get('/api/payments/status', (_request, response) => response.json({ configured: Boolean(serverConfig.razorpay.keyId && serverConfig.razorpay.keySecret), mode: 'test', keyId: serverConfig.razorpay.keyId || null }))
+app.get('/api/payments/status', (_request, response) => response.json({ configured: Boolean(serverConfig.razorpay.keyId && serverConfig.razorpay.keySecret && serverConfig.razorpay.monthlyPlanId), mode: 'test', keyId: serverConfig.razorpay.keyId || null, recurring: true, amount: 100000 }))
 app.post('/api/payments/order', async (_request, response, next) => {
   try {
-    if (!serverConfig.razorpay.keyId || !serverConfig.razorpay.keySecret) return response.status(503).json({ message: 'Razorpay Test Mode keys are not configured.' })
+    if (!serverConfig.razorpay.keyId || !serverConfig.razorpay.keySecret || !serverConfig.razorpay.monthlyPlanId) return response.status(503).json({ message: 'Razorpay monthly billing is not configured. Add RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, and RAZORPAY_MONTHLY_PLAN_ID.' })
     const razorpay = new Razorpay({ key_id: serverConfig.razorpay.keyId, key_secret: serverConfig.razorpay.keySecret })
-    const order = await razorpay.orders.create({ amount: 100000, currency: 'INR', receipt: `ct_${Date.now()}`, notes: { purpose: 'refundable_test_activation_deposit' } })
-    response.json({ orderId: order.id, amount: order.amount, currency: order.currency, keyId: serverConfig.razorpay.keyId, mode: 'test' })
+    const subscription = await razorpay.subscriptions.create({ plan_id: serverConfig.razorpay.monthlyPlanId, total_count: 120, quantity: 1, customer_notify: 1, notes: { purpose: 'careertide_monthly_membership' } })
+    response.json({ subscriptionId: subscription.id, checkoutKey: 'subscription_id', amount: 100000, currency: 'INR', keyId: serverConfig.razorpay.keyId, mode: 'test' })
   } catch (error) { next(error) }
 })
 app.post('/api/payments/verify', (request, response) => {
-  const { razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: signature } = request.body
-  if (!orderId || !paymentId || !signature || !serverConfig.razorpay.keySecret) return response.status(400).json({ verified: false, message: 'Payment verification data is incomplete.' })
-  const expected = createHmac('sha256', serverConfig.razorpay.keySecret).update(`${orderId}|${paymentId}`).digest('hex')
+  const { razorpay_order_id: orderId, razorpay_subscription_id: subscriptionId, razorpay_payment_id: paymentId, razorpay_signature: signature } = request.body
+  const referenceId = subscriptionId ?? orderId
+  if (!referenceId || !paymentId || !signature || !serverConfig.razorpay.keySecret) return response.status(400).json({ verified: false, message: 'Payment verification data is incomplete.' })
+  const expected = createHmac('sha256', serverConfig.razorpay.keySecret).update(`${paymentId}|${referenceId}`).digest('hex')
   const verified = expected.length === signature.length && timingSafeEqual(Buffer.from(expected), Buffer.from(signature))
-  response.status(verified ? 200 : 400).json({ verified, paymentId, orderId, mode: 'test' })
+  response.status(verified ? 200 : 400).json({ verified, paymentId, subscriptionId: subscriptionId ?? null, mode: 'test' })
 })
 app.post('/api/email/test', async (request, response, next) => {
   try {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { PointerEvent } from 'react'
-import { BrowserRouter, Route, Routes, useNavigate } from 'react-router-dom'
+import { BrowserRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { Header } from '../components/layout/Header'
 import { Footer } from '../components/layout/Footer'
 import { PageHero } from '../components/common/PageHero'
@@ -546,6 +546,8 @@ function App() {
 
 function RoutedApp() {
   const navigate = useNavigate()
+  const routeLocation = useLocation()
+  const isAdminRoute = routeLocation.pathname === '/admin'
   const [waves, setWaves] = useState<WaveRipple[]>([])
   const { query, setQuery, location, setLocation, experience, setExperience } = useSearch()
   const [sourceFilter, setSourceFilter] = useState('All')
@@ -665,7 +667,7 @@ function RoutedApp() {
           />
         ))}
       </div>
-      <Header location={location} onNavigate={setPage} />
+      {!isAdminRoute && <Header location={location} onNavigate={setPage} />}
 
       <Routes>
         <Route path="/" element={<HomePage {...searchProps} jobs={jobs} filteredJobs={filteredJobs} loading={loading} status={status} lastSearch={lastSearch} />} />
@@ -677,7 +679,7 @@ function RoutedApp() {
         <Route path="/workflows" element={<WorkflowsPage />} />
       </Routes>
 
-      <Footer />
+      {!isAdminRoute && <Footer />}
     </div>
   )
 }

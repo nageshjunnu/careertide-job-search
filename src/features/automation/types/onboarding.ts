@@ -7,6 +7,7 @@ export type OnboardingData = {
   skills: string
   locations: string
   experience: string
+  salaryExpectation: string
   service: string
   paymentId: string
   schedule: string
