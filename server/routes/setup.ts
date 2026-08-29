@@ -35,7 +35,12 @@ setupRouter.post('/user', async (request, response, next) => {
   try {
     const id = request.body.userId || randomUUID()
     const { email, fullName, phone, resumeName, roles, skills, locations, experience, service } = request.body
+    const phoneDigits = String(phone ?? '').replace(/\D/g, '')
     if (!email || !fullName) return response.status(400).json({ message: 'Full name and email are required.' })
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return response.status(400).json({ message: 'Enter a valid email address.' })
+    if (phoneDigits.length < 10 || phoneDigits.length > 15 || /^(\d)\1+$/.test(phoneDigits)) return response.status(400).json({ message: 'Enter a valid mobile number.' })
+    if (!experience || !roles?.trim() || !skills?.trim() || !locations?.trim()) return response.status(400).json({ message: 'Experience, target roles, skills, and locations are required.' })
+    if (!/\.(pdf|doc|docx)$/i.test(resumeName ?? '')) return response.status(400).json({ message: 'Upload a PDF, DOC, or DOCX resume.' })
     await database.query(`INSERT INTO users (id,email,full_name,phone) VALUES ($1,$2,$3,$4) ON CONFLICT (email) DO UPDATE SET full_name=$3,phone=$4,updated_at=NOW()`, [id, email, fullName, phone || null])
     const found = await database.query<{ id: string }>('SELECT id FROM users WHERE email=$1', [email])
     const userId = found.rows[0].id

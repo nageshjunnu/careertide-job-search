@@ -41,13 +41,27 @@ export function AutomationOnboarding({ onComplete }: { onComplete: () => void })
   const [runResult, setRunResult] = useState<{ discovered: number; matched: number; applicationsSubmitted: number } | null>(null)
   const [accessingSource, setAccessingSource] = useState('')
   const [sourceAccessMessage, setSourceAccessMessage] = useState('')
+  const [resumeCheck, setResumeCheck] = useState<'not_checked' | 'valid' | 'invalid'>(record.data.resumeName ? 'valid' : 'not_checked')
   const phase = ONBOARDING_PHASES[record.currentStep]
   const data = record.data
 
   if (loading) return <div className="setup-loading"><span /><p>Loading your secure setup…</p></div>
 
   const validate = () => {
-    if (record.currentStep === 0 && (!data.email.includes('@') || !data.fullName.trim() || !data.resumeName)) return 'Complete your name, valid email, and resume before continuing.'
+    if (record.currentStep === 0) {
+      const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email.trim())
+      const phoneDigits = data.phone.replace(/\D/g, '')
+      const phoneValid = phoneDigits.length >= 10 && phoneDigits.length <= 15 && !/^(\d)\1+$/.test(phoneDigits)
+      const resumeValid = /\.(pdf|doc|docx)$/i.test(data.resumeName) && resumeCheck !== 'invalid'
+      if (data.fullName.trim().length < 2) return 'Enter the candidate’s full name.'
+      if (!emailValid) return 'Enter a valid email address, for example name@example.com.'
+      if (!phoneValid) return 'Enter a valid mobile number with 10–15 digits.'
+      if (!data.experience) return 'Choose the candidate’s experience range.'
+      if (data.roles.trim().length < 2) return 'Enter at least one target job role.'
+      if (data.skills.split(',').filter((skill) => skill.trim().length >= 2).length === 0) return 'Enter at least one relevant skill.'
+      if (data.locations.split(',').filter((location) => location.trim().length >= 2).length === 0) return 'Enter at least one preferred location.'
+      if (!resumeValid) return 'Upload a PDF, DOC, or DOCX resume before continuing.'
+    }
     if (record.currentStep === 1 && !data.paymentId) return 'Complete the test payment to verify activation.'
     if (record.currentStep === 2 && data.sources.length === 0) return 'Select at least one approved job source.'
     return ''
@@ -141,6 +155,17 @@ export function AutomationOnboarding({ onComplete }: { onComplete: () => void })
     } finally { setAccessingSource('') }
   }
 
+  const validateResumeFile = (file?: File) => {
+    if (!file) { setResumeCheck('not_checked'); updateData({ resumeName: '' }); return }
+    const allowed = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+    const extensionValid = /\.(pdf|doc|docx)$/i.test(file.name)
+    if (!extensionValid || (file.type && !allowed.includes(file.type))) { setResumeCheck('invalid'); setError('Upload a PDF, DOC, or DOCX resume file.'); return }
+    if (file.size > 10 * 1024 * 1024) { setResumeCheck('invalid'); setError('Resume must be 10 MB or smaller.'); return }
+    setError('')
+    setResumeCheck('valid')
+    updateData({ resumeName: file.name })
+  }
+
   if (activationProgress !== null) return <main className="activation-shell"><section className="activation-card intelligence-card"><div className="intelligence-orb"><i /><i /><i /><span>CT</span></div><small>PROFILE INTELLIGENCE ENGINE</small><h1>{activationProgress === 100 ? 'Your first search run is complete' : 'Building your opportunity map'}</h1><p>{activationProgress < 40 ? 'Securing your preferences and notification rules…' : activationProgress < 90 ? 'Connecting profile signals to the live job feed…' : activationProgress < 100 ? 'Ranking opportunities and forming your review queue…' : 'Your schedule is active and the first genuine discovery run has been recorded.'}</p><div className="intelligence-stages"><span className={activationProgress >= 15 ? 'done' : ''}>Profile</span><b>›</b><span className={activationProgress >= 40 ? 'done' : ''}>Discover</span><b>›</b><span className={activationProgress >= 90 ? 'done' : ''}>Rank</span><b>›</b><span className={activationProgress === 100 ? 'done' : ''}>Ready</span></div><div className="activation-bar"><i style={{ width: `${activationProgress}%` }} /></div><strong>{activationProgress}%</strong>{runResult && <div className="activation-results"><div><b>{runResult.discovered}</b><span>Jobs checked</span></div><div><b>{runResult.matched}</b><span>Matches saved</span></div><div><b>{runResult.applicationsSubmitted}</b><span>Submitted</span></div></div>}{runResult && <><div className="truth-note">No application was claimed as submitted. Matches are waiting for human review because Remotive provides discovery links, not an authorized submission API.</div><Button onClick={onComplete}>Open Career Assistant dashboard →</Button></>}</section></main>
 
   return <main className="onboarding-shell">
@@ -150,16 +175,18 @@ export function AutomationOnboarding({ onComplete }: { onComplete: () => void })
       <div className="setup-card-title"><span>{phase.icon}</span><div><small>STEP {record.currentStep + 1} OF 5</small><h2>{phase.title} setup</h2><p>{phase.items.join(' • ')}</p></div></div>
 
       {record.currentStep === 0 && <div className="setup-grid phase-content" key="user">
-        <div className="setup-section-title"><strong>Create your secure profile</strong><span>Authentication is required before dashboard access.</span></div>
+        <div className="setup-section-title"><strong>Create your secure profile</strong><span>Validate the candidate profile before job matching begins.</span></div>
+        <div className="profile-validation-summary"><strong>Profile readiness checks</strong><span className={data.fullName.trim().length >= 2 ? 'valid' : ''}>Name</span><span className={/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email.trim()) ? 'valid' : ''}>Email</span><span className={data.phone.replace(/\D/g, '').length >= 10 ? 'valid' : ''}>Mobile</span><span className={data.experience ? 'valid' : ''}>Experience</span><span className={data.roles.trim().length >= 2 && data.skills.trim().length >= 2 ? 'valid' : ''}>Role & skills</span><span className={resumeCheck === 'valid' ? 'valid' : ''}>Resume</span></div>
         <Field label="Full name"><input required value={data.fullName} onChange={(event) => updateData({ fullName: event.target.value })} placeholder="Your full name" /></Field>
-        <Field label="Email address"><input required type="email" value={data.email} onChange={(event) => updateData({ email: event.target.value })} placeholder="you@example.com" /></Field>
-        <Field label="Phone"><input value={data.phone} onChange={(event) => updateData({ phone: event.target.value })} placeholder="+91 98765 43210" /></Field>
+        <Field label="Email address" hint="Used for account and job-run updates."><input required type="email" value={data.email} onChange={(event) => updateData({ email: event.target.value })} placeholder="you@example.com" /></Field>
+        <Field label="Mobile number" hint="10–15 digits, with optional country code."><input inputMode="tel" value={data.phone} onChange={(event) => updateData({ phone: event.target.value })} placeholder="+91 98765 43210" /></Field>
         <Field label="Experience"><select value={data.experience} onChange={(event) => updateData({ experience: event.target.value })}><option value="0-1">0–1 years</option><option value="0-3">0–3 years</option><option value="3-6">3–6 years</option><option value="6+">6+ years</option></select></Field>
         <Field label="Target roles"><input value={data.roles} onChange={(event) => updateData({ roles: event.target.value })} /></Field>
         <Field label="Skills"><input value={data.skills} onChange={(event) => updateData({ skills: event.target.value })} /></Field>
         <Field label="Preferred locations"><input value={data.locations} onChange={(event) => updateData({ locations: event.target.value })} /></Field>
         <Field label="Service"><select value={data.service} onChange={(event) => updateData({ service: event.target.value })}><option value="guided-automation">Guided job search</option><option value="discovery">Job discovery only</option><option value="matching">Matching and alerts</option></select></Field>
-        <Field label="Resume" hint="Demo stores only the filename; production should use encrypted object storage."><label className="resume-drop"><input accept=".pdf,.doc,.docx" type="file" onChange={(event) => updateData({ resumeName: event.target.files?.[0]?.name ?? '' })} /><span>{data.resumeName ? `✓ ${data.resumeName}` : 'Upload PDF or DOCX'}</span></label></Field>
+        <Field label="Resume" hint="PDF, DOC, or DOCX · maximum 10 MB. Filename/type is checked before saving."><label className={`resume-drop ${resumeCheck}`}><input accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" type="file" onChange={(event) => validateResumeFile(event.target.files?.[0])} /><span>{resumeCheck === 'valid' ? `✓ Resume ready · ${data.resumeName}` : resumeCheck === 'invalid' ? 'Choose a valid resume file' : 'Upload PDF, DOC, or DOCX'}</span></label></Field>
+        <p className="resume-disclosure">Current storage saves the file name only. Content-level verification—checking the resume’s name, experience, skills, and fit against a job description—requires secure file upload/storage plus a document-parsing service, which is not connected yet.</p>
       </div>}
 
       {record.currentStep === 1 && <div className="payment-stage phase-content" key="payment"><div className="test-badge">RAZORPAY TEST MODE · NO REAL CHARGE</div><div className="payment-orb"><span>₹</span></div><h3>Refundable activation deposit</h3><strong>₹1,000</strong><p>Uses Razorpay Test Mode when test keys are configured. Otherwise it remains a clearly labeled local checkout simulation.</p><ul><li>Razorpay test order</li><li>Server signature verification</li><li>Refund eligibility tracking</li></ul>{data.paymentId ? <div className="payment-success">✓ Test payment verified <small>{data.paymentId}</small></div> : <Button className={paying ? 'paying' : ''} disabled={paying} onClick={runTestPayment}>{paying ? 'Opening secure test checkout…' : 'Pay ₹1,000 in test mode'}</Button>}</div>}

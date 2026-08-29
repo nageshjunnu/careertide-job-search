@@ -23,4 +23,8 @@ export const serverConfig = {
     keyId: (process.env.RAZORPAY_KEY_ID ?? '').trim(),
     keySecret: (process.env.RAZORPAY_KEY_SECRET ?? '').trim(),
   },
+  admin: {
+    email: (process.env.ADMIN_EMAIL ?? '').trim().toLowerCase(),
+    password: process.env.ADMIN_PASSWORD ?? '',
+  },
 }

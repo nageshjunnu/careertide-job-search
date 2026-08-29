@@ -3,7 +3,7 @@ import express from 'express'
 import { serverConfig } from './config.js'
 import { sendStepEmail, verifyEmailConfiguration } from './email.js'
 import Razorpay from 'razorpay'
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { checkDatabase, database } from './database.js'
 import { setupRouter } from './routes/setup.js'
 import { runGuidedSearch } from './career-runner.js'
@@ -12,7 +12,74 @@ import { runScheduledSearches, startCareerScheduler } from './scheduler.js'
 export const app = express()
 app.use(cors({ origin: serverConfig.clientUrl }))
 app.use(express.json({ limit: '1mb' }))
+
+type AdminRequest = express.Request & { adminEmail?: string }
+const hashToken = (token: string) => createHash('sha256').update(token).digest('hex')
+const auditAdmin = (email: string, action: string, targetType?: string, targetId?: string, metadata?: object) => database.query('INSERT INTO admin_audit_logs (admin_email,action,target_type,target_id,metadata) VALUES ($1,$2,$3,$4,$5)', [email, action, targetType ?? null, targetId ?? null, metadata ? JSON.stringify(metadata) : null])
+const requireAdmin = async (request: AdminRequest, response: express.Response, next: express.NextFunction) => {
+  try {
+    const token = request.headers.authorization?.replace(/^Bearer\s+/i, '')
+    if (!token) return response.status(401).json({ message: 'Admin sign-in is required.' })
+    const session = await database.query<{ admin_email: string }>('SELECT admin_email FROM admin_sessions WHERE token_hash=$1 AND expires_at>NOW()', [hashToken(token)])
+    if (!session.rows[0]) return response.status(401).json({ message: 'Your admin session has expired. Sign in again.' })
+    request.adminEmail = session.rows[0].admin_email
+    void database.query('UPDATE admin_sessions SET last_seen_at=NOW() WHERE token_hash=$1', [hashToken(token)])
+    next()
+  } catch (error) { next(error) }
+}
 app.get('/api/health', async (_request, response) => response.json({ ok: true, database: await checkDatabase() }))
+app.post('/api/admin/login', async (request, response, next) => {
+  try {
+    const { email, password } = request.body as { email?: string; password?: string }
+    if (!serverConfig.admin.email || !serverConfig.admin.password) return response.status(503).json({ message: 'Admin credentials are not configured. Add ADMIN_EMAIL and ADMIN_PASSWORD to the server environment.' })
+    const expected = Buffer.from(serverConfig.admin.password)
+    const supplied = Buffer.from(password ?? '')
+    const passwordMatches = expected.length === supplied.length && timingSafeEqual(expected, supplied)
+    if (email?.trim().toLowerCase() !== serverConfig.admin.email || !passwordMatches) return response.status(401).json({ message: 'Invalid admin email or password.' })
+    const token = randomBytes(32).toString('hex')
+    await database.query(`INSERT INTO admin_sessions (token_hash,admin_email,expires_at) VALUES ($1,$2,NOW()+INTERVAL '7 days')`, [hashToken(token), serverConfig.admin.email])
+    await auditAdmin(serverConfig.admin.email, 'admin_signed_in')
+    response.json({ token, admin: { email: serverConfig.admin.email }, expiresInDays: 7 })
+  } catch (error) { next(error) }
+})
+app.post('/api/admin/logout', requireAdmin, async (request: AdminRequest, response, next) => {
+  try {
+    const token = request.headers.authorization?.replace(/^Bearer\s+/i, '') ?? ''
+    await database.query('DELETE FROM admin_sessions WHERE token_hash=$1', [hashToken(token)])
+    await auditAdmin(request.adminEmail!, 'admin_signed_out')
+    response.json({ signedOut: true })
+  } catch (error) { next(error) }
+})
+app.get('/api/admin/overview', requireAdmin, async (_request: AdminRequest, response, next) => {
+  try {
+    const [totals, workflow, payments, recentUsers, recentRuns, emails, audits] = await Promise.all([
+      database.query<{ users: string; profiles: string; matches: string }>(`SELECT (SELECT COUNT(*) FROM users)::text users,(SELECT COUNT(*) FROM career_profiles)::text profiles,(SELECT COUNT(*) FROM job_matches)::text matches`),
+      database.query<{ active: string; paused: string; configured: string }>(`SELECT COUNT(*) FILTER (WHERE status='active')::text active,COUNT(*) FILTER (WHERE status='paused')::text paused,COUNT(*) FILTER (WHERE status='configured')::text configured FROM career_workflows`),
+      database.query<{ verified: string; amount: string }>(`SELECT COUNT(*) FILTER (WHERE status='verified')::text verified,COALESCE(SUM(amount) FILTER (WHERE status='verified'),0)::text amount FROM payments`),
+      database.query(`SELECT u.id,u.full_name,u.email,u.created_at,COALESCE(w.status,'not configured') workflow_status FROM users u LEFT JOIN career_workflows w ON w.user_id=u.id ORDER BY u.created_at DESC LIMIT 6`),
+      database.query(`SELECT r.id,r.status,r.jobs_discovered,r.jobs_matched,r.progress_percent,r.started_at,u.full_name FROM career_runs r JOIN users u ON u.id=r.user_id ORDER BY r.started_at DESC LIMIT 6`),
+      database.query<{ sent: string; failed: string }>(`SELECT COUNT(*) FILTER (WHERE status='sent')::text sent,COUNT(*) FILTER (WHERE status='failed')::text failed FROM email_logs`),
+      database.query(`SELECT admin_email,action,target_type,target_id,created_at FROM admin_audit_logs ORDER BY created_at DESC LIMIT 8`),
+    ])
+    response.json({ totals: totals.rows[0], workflows: workflow.rows[0], payments: payments.rows[0], emails: emails.rows[0], recentUsers: recentUsers.rows, recentRuns: recentRuns.rows, audits: audits.rows })
+  } catch (error) { next(error) }
+})
+app.get('/api/admin/users', requireAdmin, async (_request: AdminRequest, response, next) => {
+  try {
+    const users = await database.query(`SELECT u.id,u.full_name,u.email,u.phone,u.created_at,p.roles,p.experience,p.locations,COALESCE(w.status,'not configured') workflow_status,w.schedule,w.timezone,COALESCE((SELECT COUNT(*) FROM job_matches m WHERE m.user_id=u.id),0)::int matches FROM users u LEFT JOIN career_profiles p ON p.user_id=u.id LEFT JOIN career_workflows w ON w.user_id=u.id ORDER BY u.created_at DESC`)
+    response.json({ users: users.rows })
+  } catch (error) { next(error) }
+})
+app.patch('/api/admin/users/:userId/workflow', requireAdmin, async (request: AdminRequest, response, next) => {
+  try {
+    const { status } = request.body as { status?: 'active' | 'paused' }
+    if (!['active', 'paused'].includes(status ?? '')) return response.status(400).json({ message: 'Choose active or paused.' })
+    const updated = await database.query('UPDATE career_workflows SET status=$2,updated_at=NOW() WHERE user_id=$1 RETURNING user_id,status', [request.params.userId, status])
+    if (!updated.rows[0]) return response.status(404).json({ message: 'Workflow not found.' })
+    await auditAdmin(request.adminEmail!, `workflow_${status}`, 'user', request.params.userId)
+    response.json({ updated: true, workflow: updated.rows[0] })
+  } catch (error) { next(error) }
+})
 app.use('/api/setup', setupRouter)
 app.post('/api/career-runs/:userId', async (request, response, next) => {
   try { response.json(await runGuidedSearch(request.params.userId)) } catch (error) { next(error) }
