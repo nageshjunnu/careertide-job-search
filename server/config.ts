@@ -1,9 +1,15 @@
 import 'dotenv/config'
 
+const isVercelRuntime = Boolean(process.env.VERCEL)
+const localDatabaseUrl = 'postgresql://postgres:postgres@localhost:5432/job-search-aggregator'
+
 export const serverConfig = {
   port: Number(process.env.PORT ?? 4000),
   clientUrl: process.env.CLIENT_URL ?? 'http://localhost:5173',
-  databaseUrl: process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5432/job-search-aggregator',
+  // Local development may use the bundled PostgreSQL default. A Vercel function
+  // must receive DATABASE_URL from Vercel Environment Variables and must never
+  // silently attempt to reach localhost.
+  databaseUrl: process.env.DATABASE_URL ?? (isVercelRuntime ? '' : localDatabaseUrl),
   smtp: {
     host: process.env.SMTP_HOST ?? '',
     port: Number(process.env.SMTP_PORT ?? 587),
