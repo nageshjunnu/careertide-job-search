@@ -20,7 +20,12 @@ export type AutomationContextValue = {
   lastRefreshed: Date | null
   refreshDashboard: () => Promise<void>
   markApplied: (matchId: number) => Promise<void>
+  applyToMatch: (matchId: number) => Promise<void>
+  batchApplyMatches: (matchIds?: number[]) => Promise<void>
+  triggerSearchRun: () => Promise<void>
   requestPlatformIntegration: (source: string) => Promise<void>
+  authorizePlatformIntegration: (source: string, payload?: { scopes?: string[]; accountIdentifier?: string; accessToken?: string }) => Promise<void>
+  serverUserId: string
   userName: string
 }
 

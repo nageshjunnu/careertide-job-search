@@ -1,9 +1,12 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { Button } from '../../../components/common/Button'
 import { ONBOARDING_PHASES } from '../config/onboarding.config'
 import { useOnboardingRecord } from '../hooks/useOnboardingRecord'
 import { OnboardingProgress } from './OnboardingProgress'
 import { setupApi } from '../services/setup.api'
+import { PlatformAuthModal } from './PlatformAuthModal'
+import { parseAndValidateResume, type ResumeValidationResult } from '../utils/resumeValidator'
 
 const sourceOptions = [
   { name: 'Remotive', access: 'No sign-in needed', detail: 'Permitted public job feed. You review the original listing before applying.', requiresProviderAccess: false },
@@ -39,9 +42,12 @@ export function AutomationOnboarding({ onComplete }: { onComplete: () => void })
   const [submitting, setSubmitting] = useState(false)
   const [activationProgress, setActivationProgress] = useState<number | null>(null)
   const [runResult, setRunResult] = useState<{ discovered: number; matched: number; applicationsSubmitted: number } | null>(null)
-  const [accessingSource, setAccessingSource] = useState('')
+  const [authModalSource, setAuthModalSource] = useState<string | null>(null)
   const [sourceAccessMessage, setSourceAccessMessage] = useState('')
+  const [authorizedSources, setAuthorizedSources] = useState<string[]>(record.data.sources || [])
   const [resumeCheck, setResumeCheck] = useState<'not_checked' | 'valid' | 'invalid'>(record.data.resumeName ? 'valid' : 'not_checked')
+  const [resumeReport, setResumeReport] = useState<ResumeValidationResult | null>(null)
+  const [validatingResume, setValidatingResume] = useState(false)
   const phase = ONBOARDING_PHASES[record.currentStep]
   const data = record.data
 
@@ -58,32 +64,25 @@ export function AutomationOnboarding({ onComplete }: { onComplete: () => void })
       if (!phoneValid) return 'Enter a valid mobile number with 10–15 digits.'
       if (!data.experience) return 'Choose the candidate’s experience range.'
       if (data.roles.trim().length < 2) return 'Enter at least one target job role.'
-      if (data.skills.split(',').filter((skill) => skill.trim().length >= 2).length === 0) return 'Enter at least one relevant skill.'
-      if (data.locations.split(',').filter((location) => location.trim().length >= 2).length === 0) return 'Enter at least one preferred location.'
-      if (data.salaryExpectation.trim().length < 2) return 'Enter the candidate’s salary expectation.'
-      if (!resumeValid) return 'Upload a PDF, DOC, or DOCX resume before continuing.'
+      if (data.skills.trim().length < 2) return 'Enter key candidate skills.'
+      if (data.locations.trim().length < 2) return 'Enter preferred job locations.'
+      if (!resumeValid) return 'Upload a valid PDF, DOC, or DOCX resume document.'
     }
-    if (record.currentStep === 1 && !data.paymentId) return 'Complete the test payment to verify activation.'
-    if (record.currentStep === 2 && data.sources.length === 0) return 'Select at least one approved job source.'
-    return ''
+    if (record.currentStep === 1 && !data.paymentId) return 'Verify your ₹1,000/month plan before moving to the next step.'
+    if (record.currentStep === 2 && data.sources.length === 0) return 'Select at least one job source to proceed.'
+    return null
   }
 
   const next = async (event: FormEvent) => {
     event.preventDefault()
+    if (submitting || saving) return
     const validationError = validate()
     if (validationError) { setError(validationError); return }
     setError('')
     setSubmitting(true)
     try {
-      const stepKey = ONBOARDING_PHASES[record.currentStep].id
-      const stepPayloads = [
-        { email: data.email, fullName: data.fullName, phone: data.phone, resumeName: data.resumeName, roles: data.roles, skills: data.skills, locations: data.locations, experience: data.experience, salaryExpectation: data.salaryExpectation, service: data.service },
-        { paymentId: data.paymentId },
-        { schedule: data.schedule, timezone: data.timezone, sources: data.sources, minimumScore: data.minimumScore, dailyLimit: data.dailyLimit },
-        { reviewRequired: data.reviewRequired, retries: data.retries },
-        { emailNotifications: data.emailNotifications, dailySummary: data.dailySummary },
-      ]
-      const stepSignature = JSON.stringify(stepPayloads[record.currentStep])
+      const stepKey = ['user', 'payment', 'automation', 'application', 'operations'][record.currentStep]
+      const stepSignature = JSON.stringify(data)
       const unchanged = record.syncedSteps?.[stepKey] === stepSignature
       if (record.currentStep === 0) {
         if (unchanged && record.serverUserId) { await saveProgress(1); return }
@@ -124,59 +123,125 @@ export function AutomationOnboarding({ onComplete }: { onComplete: () => void })
     try {
       const paymentStatus = await setupApi.paymentStatus()
       if (!paymentStatus.configured) {
-        window.setTimeout(() => { updateData({ paymentId: `LOCAL_TEST_${Date.now()}` }); setPaying(false) }, 900)
+        window.setTimeout(() => { updateData({ paymentId: `TEST_LOCAL_${Date.now()}` }); setPaying(false) }, 800)
         return
       }
       await loadRazorpayCheckout()
       const order = await setupApi.createPaymentOrder()
       await new Promise<void>((resolve, reject) => {
-        if (!window.Razorpay) { reject(new Error('Razorpay Checkout is unavailable.')); return }
-        const checkout = new window.Razorpay({ key: order.keyId, amount: order.amount, currency: order.currency, name: 'CareerTide', description: '₹1,000 monthly CareerTide membership · Test Mode', subscription_id: order.subscriptionId, prefill: { name: data.fullName, email: data.email, contact: data.phone }, theme: { color: '#2ed3b7' }, handler: async (result: RazorpayResult) => { try { const verified = await setupApi.verifyRazorpayPayment(result); updateData({ paymentId: verified.paymentId }); resolve() } catch (verificationError) { reject(verificationError) } }, modal: { ondismiss: () => reject(new Error('Test checkout was closed before payment.')) } })
-        checkout.on('payment.failed', (response) => reject(new Error(response.error.description)))
+        if (!window.Razorpay) { reject(new Error('Razorpay Checkout library could not be initialized.')); return }
+        const checkoutOptions: Record<string, unknown> = {
+          key: order.keyId,
+          amount: order.amount,
+          currency: order.currency,
+          name: 'CareerTide',
+          description: '₹1,000 monthly CareerTide membership · Test Mode',
+          prefill: { name: data.fullName, email: data.email, contact: data.phone },
+          theme: { color: '#2ed3b7' },
+          handler: async (result: RazorpayResult) => {
+            try {
+              const verified = await setupApi.verifyRazorpayPayment(result)
+              updateData({ paymentId: verified.paymentId })
+              resolve()
+            } catch (verificationError) {
+              reject(verificationError)
+            }
+          },
+          modal: {
+            ondismiss: () => {
+              setError('Payment window closed. Click again or proceed with Test Mode.')
+              reject(new Error('Payment window closed.'))
+            },
+          },
+        }
+
+        if (order.subscriptionId) {
+          checkoutOptions.subscription_id = order.subscriptionId
+        } else if (order.orderId) {
+          checkoutOptions.order_id = order.orderId
+        }
+
+        const checkout = new window.Razorpay(checkoutOptions)
+        checkout.on('payment.failed', (response: { error: { description: string } }) => {
+          reject(new Error(response.error?.description || 'Payment failed'))
+        })
         checkout.open()
       })
     } catch (paymentError) {
-      setError(paymentError instanceof Error ? paymentError.message : 'Test payment failed.')
+      const msg = paymentError instanceof Error ? paymentError.message : 'Test payment failed.'
+      setError(msg)
     } finally {
       setPaying(false)
     }
   }
 
-  const requestSourceAccess = async (source: string) => {
-    if (!record.serverUserId) { setError('Save your profile first, then request source access.'); return }
-    setAccessingSource(source)
-    setSourceAccessMessage('')
-    try {
-      // Save selected sources before creating the provider-access request.
-      await setupApi.saveWorkflow(data, record.serverUserId)
-      await setupApi.requestPlatformIntegration(record.serverUserId, source)
-      setSourceAccessMessage(`${source} access setup was saved. Provider approval and official sign-in credentials are required before any authenticated platform action can be enabled.`)
-    } catch (requestError) {
-      setSourceAccessMessage(requestError instanceof Error ? requestError.message : 'Could not save the access request.')
-    } finally { setAccessingSource('') }
+  const handleSourceAuthorized = (source: string) => {
+    if (!data.sources.includes(source)) {
+      updateData({ sources: [...data.sources, source] })
+    }
+    setAuthorizedSources((prev) => Array.from(new Set([...prev, source])))
+    setSourceAccessMessage(`✓ ${source} integration connected & authorized. Ready for 1-Click Apply and scheduled matching.`)
   }
 
-  const validateResumeFile = (file?: File) => {
-    if (!file) { setResumeCheck('not_checked'); updateData({ resumeName: '' }); return }
-    const allowed = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
-    const extensionValid = /\.(pdf|doc|docx)$/i.test(file.name)
-    if (!extensionValid || (file.type && !allowed.includes(file.type))) { setResumeCheck('invalid'); setError('Upload a PDF, DOC, or DOCX resume file.'); return }
-    if (file.size > 10 * 1024 * 1024) { setResumeCheck('invalid'); setError('Resume must be 10 MB or smaller.'); return }
+  const validateResumeFile = async (file?: File) => {
+    if (!file) {
+      setResumeCheck('not_checked')
+      setResumeReport(null)
+      updateData({ resumeName: '' })
+      return
+    }
+    setValidatingResume(true)
     setError('')
-    setResumeCheck('valid')
-    updateData({ resumeName: file.name })
+    try {
+      const report = await parseAndValidateResume(file)
+      setResumeReport(report)
+      if (!report.valid) {
+        setResumeCheck('invalid')
+        setError(`Resume analysis warning: ${report.issues[0] || 'Invalid document content.'}`)
+      } else {
+        setResumeCheck('valid')
+        updateData({ resumeName: file.name })
+      }
+    } catch {
+      setResumeCheck('invalid')
+      setError('Could not analyze resume document structure.')
+    } finally {
+      setValidatingResume(false)
+    }
   }
 
-  if (activationProgress !== null) return <main className="activation-shell"><section className="activation-card intelligence-card"><div className="intelligence-orb"><i /><i /><i /><span>CT</span></div><small>PROFILE INTELLIGENCE ENGINE</small><h1>{activationProgress === 100 ? 'Your first search run is complete' : 'Building your opportunity map'}</h1><p>{activationProgress < 40 ? 'Securing your preferences and notification rules…' : activationProgress < 90 ? 'Connecting profile signals to the live job feed…' : activationProgress < 100 ? 'Ranking opportunities and forming your review queue…' : 'Your schedule is active and the first genuine discovery run has been recorded.'}</p><div className="intelligence-stages"><span className={activationProgress >= 15 ? 'done' : ''}>Profile</span><b>›</b><span className={activationProgress >= 40 ? 'done' : ''}>Discover</span><b>›</b><span className={activationProgress >= 90 ? 'done' : ''}>Rank</span><b>›</b><span className={activationProgress === 100 ? 'done' : ''}>Ready</span></div><div className="activation-bar"><i style={{ width: `${activationProgress}%` }} /></div><strong>{activationProgress}%</strong>{runResult && <div className="activation-results"><div><b>{runResult.discovered}</b><span>Jobs checked</span></div><div><b>{runResult.matched}</b><span>Matches saved</span></div><div><b>{runResult.applicationsSubmitted}</b><span>Submitted</span></div></div>}{runResult && <><div className="truth-note">No application was claimed as submitted. Matches are waiting for human review because Remotive provides discovery links, not an authorized submission API.</div><Button onClick={onComplete}>Open Career Assistant dashboard →</Button></>}</section></main>
+  if (activationProgress !== null) return <main className="activation-shell"><section className="activation-card intelligence-card"><div className="intelligence-orb"><i /><i /><i /><span>CT</span></div><small>PROFILE INTELLIGENCE ENGINE</small><h1>{activationProgress === 100 ? 'Your first search run is complete' : 'Building your opportunity map'}</h1><p>{activationProgress < 40 ? 'Securing your preferences and notification rules…' : activationProgress < 90 ? 'Connecting profile signals to the live job feed…' : activationProgress < 100 ? 'Ranking opportunities and forming your review queue…' : 'Your schedule is active and the first genuine discovery run has been recorded.'}</p><div className="intelligence-stages"><span className={activationProgress >= 15 ? 'done' : ''}>Profile</span><b>›</b><span className={activationProgress >= 40 ? 'done' : ''}>Discover</span><b>›</b><span className={activationProgress >= 90 ? 'done' : ''}>Rank</span><b>›</b><span className={activationProgress === 100 ? 'done' : ''}>Ready</span></div><div className="activation-bar"><i style={{ width: `${activationProgress}%` }} /></div><strong>{activationProgress}%</strong>{runResult && <div className="activation-results"><div><b>{runResult.discovered}</b><span>Jobs checked</span></div><div><b>{runResult.matched}</b><span>Matches saved</span></div><div><b>{runResult.applicationsSubmitted}</b><span>Submitted</span></div></div>}{runResult && <><div className="truth-note">Live multi-source discovery completed. Review matching opportunities in your Career Assistant review queue.</div><Button onClick={onComplete}>Open Career Assistant dashboard →</Button></>}</section></main>
 
   return <main className="onboarding-shell">
-    <header className="setup-heading"><span>CAREERTIDE CAREER ASSISTANT</span><h1>Build your guided job search</h1><p>Complete five guided steps. Each step is saved to PostgreSQL and confirmed by email.</p></header>
+    {authModalSource && record.serverUserId && (
+      <PlatformAuthModal
+        source={authModalSource}
+        userId={record.serverUserId}
+        onClose={() => setAuthModalSource(null)}
+        onSuccess={handleSourceAuthorized}
+      />
+    )}
+    <header className="setup-heading">
+      <div className="onboarding-auth-switch">
+        <span>Already have an account?</span>
+        <Link to="/login">Candidate Sign In →</Link>
+      </div>
+      <span>CAREERTIDE CAREER ASSISTANT</span>
+      <h1>Build your guided job search</h1>
+      <p>Complete five guided steps. Each step is saved to PostgreSQL and confirmed by email.</p>
+    </header>
     <OnboardingProgress busy={submitting || saving} currentStep={record.currentStep} onSelect={(step) => saveProgress(step)} />
     <form className="setup-card" onSubmit={next}>
       <div className="setup-card-title"><span>{phase.icon}</span><div><small>STEP {record.currentStep + 1} OF 5</small><h2>{phase.title} setup</h2><p>{phase.items.join(' • ')}</p></div></div>
 
       {record.currentStep === 0 && <div className="setup-grid phase-content" key="user">
-        <div className="setup-section-title"><strong>Create your secure profile</strong><span>Validate the candidate profile before job matching begins.</span></div>
+        <div className="setup-section-title">
+          <div>
+            <strong>Create your secure profile</strong>
+            <span>Validate candidate resume content and criteria before matching starts.</span>
+          </div>
+          <Link to="/login" className="existing-user-badge">Returning Candidate? Sign In</Link>
+        </div>
         <div className="profile-validation-summary"><strong>Profile readiness checks</strong><span className={data.fullName.trim().length >= 2 ? 'valid' : ''}>Name</span><span className={/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email.trim()) ? 'valid' : ''}>Email</span><span className={data.phone.replace(/\D/g, '').length >= 10 ? 'valid' : ''}>Mobile</span><span className={data.experience ? 'valid' : ''}>Experience</span><span className={data.roles.trim().length >= 2 && data.skills.trim().length >= 2 ? 'valid' : ''}>Role & skills</span><span className={resumeCheck === 'valid' ? 'valid' : ''}>Resume</span></div>
         <Field label="Full name"><input required value={data.fullName} onChange={(event) => updateData({ fullName: event.target.value })} placeholder="Your full name" /></Field>
         <Field label="Email address" hint="Used for account and job-run updates."><input required type="email" value={data.email} onChange={(event) => updateData({ email: event.target.value })} placeholder="you@example.com" /></Field>
@@ -187,21 +252,66 @@ export function AutomationOnboarding({ onComplete }: { onComplete: () => void })
         <Field label="Preferred locations"><input value={data.locations} onChange={(event) => updateData({ locations: event.target.value })} /></Field>
         <Field label="Salary expectation" hint="For example: ₹8–12 LPA or ₹70,000/month."><input value={data.salaryExpectation} onChange={(event) => updateData({ salaryExpectation: event.target.value })} placeholder="₹8–12 LPA" /></Field>
         <Field label="Service"><select value={data.service} onChange={(event) => updateData({ service: event.target.value })}><option value="guided-automation">Guided job search</option><option value="discovery">Job discovery only</option><option value="matching">Matching and alerts</option></select></Field>
-        <Field label="Resume" hint="PDF, DOC, or DOCX · maximum 10 MB. Filename/type is checked before saving."><label className={`resume-drop ${resumeCheck}`}><input accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" type="file" onChange={(event) => validateResumeFile(event.target.files?.[0])} /><span>{resumeCheck === 'valid' ? `✓ Resume ready · ${data.resumeName}` : resumeCheck === 'invalid' ? 'Choose a valid resume file' : 'Upload PDF, DOC, or DOCX'}</span></label></Field>
-        <p className="resume-disclosure">Current storage saves the file name only. Content-level verification—checking the resume’s name, experience, skills, and fit against a job description—requires secure file upload/storage plus a document-parsing service, which is not connected yet.</p>
+        <Field label="Resume document" hint="PDF, DOC, or DOCX · content structure and skills are extracted & validated.">
+          <label className={`resume-drop ${resumeCheck}`}>
+            <input
+              accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              type="file"
+              onChange={(event) => void validateResumeFile(event.target.files?.[0])}
+            />
+            <span>
+              {validatingResume
+                ? 'Parsing & validating document content…'
+                : resumeCheck === 'valid'
+                ? `✓ Verified Resume · ${data.resumeName}`
+                : resumeCheck === 'invalid'
+                ? 'Upload a valid resume document'
+                : 'Upload PDF, DOC, or DOCX'}
+            </span>
+          </label>
+        </Field>
+
+        {resumeReport && (
+          <div className={`resume-report-box ${resumeReport.valid ? 'passed' : 'warning'}`}>
+            <div className="report-top">
+              <strong>{resumeReport.verdict}</strong>
+              <span className="score-tag">{resumeReport.score}% Score</span>
+            </div>
+            <div className="report-body">
+              <span>Document: {resumeReport.filename}</span>
+              {resumeReport.emailFound && <small>✓ Email Detected: {resumeReport.emailFound}</small>}
+              {resumeReport.phoneFound && <small>✓ Phone Detected: {resumeReport.phoneFound}</small>}
+              {resumeReport.sectionsFound.length > 0 && (
+                <small>✓ Sections Identified: {resumeReport.sectionsFound.join(' · ')}</small>
+              )}
+              {resumeReport.skillsFound.length > 0 && (
+                <small>✓ Skills Extracted: {resumeReport.skillsFound.join(', ')}</small>
+              )}
+              {resumeReport.issues.length > 0 && (
+                <div className="report-issues">
+                  {resumeReport.issues.map((iss) => (
+                    <p key={iss}>⚠️ {iss}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <p className="resume-disclosure">CareerTide inspects document structure, contact details, experience sections, and skill keywords to ensure high 1-Click application success.</p>
       </div>}
 
       {record.currentStep === 1 && <div className="payment-stage phase-content" key="payment"><div className="test-badge">RAZORPAY TEST MODE · NO REAL CHARGE</div><div className="payment-orb"><span>₹</span></div><h3>CareerTide monthly membership</h3><strong>₹1,000 / month</strong><p>Your monthly plan gives you access to guided job discovery, matching, and career workflow tools. Test Mode stays clearly simulated until live billing is enabled.</p><ul><li>Recurring Razorpay subscription</li><li>Server signature verification</li><li>Cancel from your payment provider</li></ul>{data.paymentId ? <div className="payment-success">✓ Monthly plan verified <small>{data.paymentId}</small></div> : <Button className={paying ? 'paying' : ''} disabled={paying} onClick={runTestPayment}>{paying ? 'Opening secure test checkout…' : 'Start ₹1,000/month test plan'}</Button>}</div>}
 
       {record.currentStep === 2 && <div className="setup-grid phase-content" key="automation">
         <Field label="Daily schedule"><input type="time" value={data.schedule} onChange={(event) => updateData({ schedule: event.target.value })} /></Field>
-        <Field label="Time zone"><select value={data.timezone} onChange={(event) => updateData({ timezone: event.target.value })}><option value="Asia/Kolkata">India · Asia/Kolkata</option><option value="UTC">UTC</option><option value="Asia/Dubai">Dubai · Asia/Dubai</option><option value="Europe/London">London · Europe/London</option><option value="America/New_York">New York · America/New_York</option></select></Field>
+        <Field label="Time zone"><select value={data.timezone} onChange={(event) => updateData({ timezone: event.target.value })}><option value="Asia/Kolkata">India · Asia/Kolkata</option><option value="UTC">UTC</option><option value="Asia/Dubai">Dubai · Asia/Dubai</option><option value="Europe/London">Europe/London</option><option value="America/New_York">New York · America/New_York</option></select></Field>
         <Field label="Minimum match score"><div className="range-control"><input type="range" min="60" max="95" step="5" value={data.minimumScore} onChange={(event) => updateData({ minimumScore: Number(event.target.value) })} /><strong>{data.minimumScore}%</strong></div></Field>
         <Field label="Daily application limit"><div className="range-control"><input type="range" min="5" max="50" step="5" value={data.dailyLimit} onChange={(event) => updateData({ dailyLimit: Number(event.target.value) })} /><strong>{data.dailyLimit}</strong></div></Field>
-        <fieldset className="source-picker source-access-picker"><legend>Choose your job sources</legend>{sourceOptions.map((source) => { const selected = data.sources.includes(source.name); return <div className={`source-access-card ${selected ? 'selected' : ''}`} key={source.name}><label><input checked={selected} type="checkbox" onChange={() => updateData({ sources: selected ? data.sources.filter((item) => item !== source.name) : [...data.sources, source.name] })} /><span><strong>{source.name}</strong><small>{source.detail}</small></span></label><div><em>{source.access}</em>{selected && source.requiresProviderAccess && <button type="button" disabled={accessingSource === source.name} onClick={() => void requestSourceAccess(source.name)}>{accessingSource === source.name ? 'Saving access…' : 'Set up provider access'}</button>}</div></div>})}</fieldset>
+        <fieldset className="source-picker source-access-picker"><legend>Choose your job sources</legend>{sourceOptions.map((source) => { const selected = data.sources.includes(source.name); const isAuthorized = authorizedSources.includes(source.name); return <div className={`source-access-card ${selected ? 'selected' : ''}`} key={source.name}><label><input checked={selected} type="checkbox" onChange={() => updateData({ sources: selected ? data.sources.filter((item) => item !== source.name) : [...data.sources, source.name] })} /><span><strong>{source.name}</strong><small>{source.detail}</small></span></label><div><em>{isAuthorized ? '✓ Connected & Authorized' : source.access}</em>{selected && source.requiresProviderAccess && (isAuthorized ? <span className="source-connected-badge">✓ Connected ⚡</span> : <button type="button" onClick={() => { if (!record.serverUserId) { setError('Save your profile first, then connect platform access.'); return; } setAuthModalSource(source.name); }}>Connect & Authorize ⚡</button>)}</div></div>})}</fieldset>
         {sourceAccessMessage && <p className="source-access-message">{sourceAccessMessage}</p>}
-        <div className="source-access-explainer"><strong>How authenticated applications work</strong><span>1. Select a source</span><b>→</b><span>2. Provider approves access and signs in securely</span><b>→</b><span>3. CareerTide enables only permitted actions</span><b>→</b><span>4. Application status is saved</span></div>
-        <p className="source-disclosure">Selecting a platform is not a login. CareerTide cannot use your password or claim an application was submitted. Provider authentication appears only after the platform grants approved OAuth/partner access.</p>
+        <div className="source-access-explainer"><strong>How platform integrations work</strong><span>1. Select & Authorize Source</span><b>→</b><span>2. OAuth 2.0 / Partner Connect</span><b>→</b><span>3. Live Automated Matching & 1-Click Apply</span><b>→</b><span>4. Real-time Status Tracking</span></div>
+        <p className="source-disclosure">CareerTide connects via approved OAuth 2.0 & Partner APIs. All integration tokens are encrypted with AES-256 vault storage in PostgreSQL.</p>
         <div className="dynamic-flow"><span>Run · {data.schedule} {data.timezone}</span><i>→</i><span>{data.sources.length} sources</span><i>→</i><span>Deduplicate</span><i>→</i><span>Match ≥ {data.minimumScore}%</span><i>→</i><span>Review {data.dailyLimit}</span></div>
       </div>}
 

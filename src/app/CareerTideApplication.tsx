@@ -12,6 +12,7 @@ import { SearchProvider } from '../context/SearchContext'
 import { useSearch } from '../context/useSearch'
 import { AutomationPage } from '../features/automation/pages/AutomationPage'
 import { AdminPage } from '../features/admin/pages/AdminPage'
+import { CandidateLoginPage } from '../features/candidate/pages/CandidateLoginPage'
 import '../App.css'
 
 type WaveRipple = {
@@ -673,6 +674,8 @@ function RoutedApp() {
         <Route path="/" element={<HomePage {...searchProps} jobs={jobs} filteredJobs={filteredJobs} loading={loading} status={status} lastSearch={lastSearch} />} />
         <Route path="/jobs" element={<JobsPage {...searchProps} filteredJobs={filteredJobs} jobs={jobs} loading={loading} status={status} sourceFilter={sourceFilter} setSourceFilter={setSourceFilter} sourceOptions={sourceOptions} jobType={jobType} setJobType={setJobType} roleFamily={roleFamily} setRoleFamily={setRoleFamily} experienceFilter={experienceFilter} setExperienceFilter={setExperienceFilter} locationFilter={locationFilter} setLocationFilter={setLocationFilter} salaryFilter={salaryFilter} setSalaryFilter={setSalaryFilter} dateFilter={dateFilter} setDateFilter={setDateFilter} tags={tags} lastSearch={lastSearch} searchCount={searchCount} />} />
         <Route path="/automation" element={<AutomationPage />} />
+        <Route path="/login" element={<CandidateLoginPage />} />
+        <Route path="/candidate-login" element={<CandidateLoginPage />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/companies" element={<CompaniesPage jobs={jobs} />} />
         <Route path="/sources" element={<SourcesPage query={query} location={location} setQuery={setQuery} setPage={setPage} />} />

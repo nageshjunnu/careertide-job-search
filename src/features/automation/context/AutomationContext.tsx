@@ -91,11 +91,56 @@ export function AutomationProvider({ children }: { children: ReactNode }) {
     await setupApi.updateMatchStatus(serverUserId, matchId, 'applied')
     await refreshDashboard()
   }
+  const applyToMatch = async (matchId: number) => {
+    if (!serverUserId) throw new Error('Server user is missing')
+    await setupApi.applyToMatch(serverUserId, matchId)
+    await refreshDashboard()
+  }
+  const batchApplyMatches = async (matchIds?: number[]) => {
+    if (!serverUserId) throw new Error('Server user is missing')
+    await setupApi.batchApplyMatches(serverUserId, matchIds)
+    await refreshDashboard()
+  }
+  const triggerSearchRun = async () => {
+    if (!serverUserId) throw new Error('Server user is missing')
+    await setupApi.runGuidedSearch(serverUserId)
+    await refreshDashboard()
+  }
   const requestPlatformIntegration = async (source: string) => {
     if (!serverUserId) throw new Error('Server user is missing')
     await setupApi.requestPlatformIntegration(serverUserId, source)
     await refreshDashboard()
   }
-  const value = { status, toggleStatus, statusChanging, depositVerified, verifyDeposit: () => setDepositVerified(true), settings, updateSettings, saveSettings, settingsSaving, applications, metrics, runs, runProgress, sourceWorkflows, lastRefreshed, refreshDashboard, markApplied, requestPlatformIntegration, userName }
+  const authorizePlatformIntegration = async (source: string, payload?: { scopes?: string[]; accountIdentifier?: string; accessToken?: string }) => {
+    if (!serverUserId) throw new Error('Server user is missing')
+    await setupApi.authorizePlatformIntegration(serverUserId, source, payload)
+    await refreshDashboard()
+  }
+  const value = {
+    status,
+    toggleStatus,
+    statusChanging,
+    depositVerified,
+    verifyDeposit: () => setDepositVerified(true),
+    settings,
+    updateSettings,
+    saveSettings,
+    settingsSaving,
+    applications,
+    metrics,
+    runs,
+    runProgress,
+    sourceWorkflows,
+    lastRefreshed,
+    refreshDashboard,
+    markApplied,
+    applyToMatch,
+    batchApplyMatches,
+    triggerSearchRun,
+    requestPlatformIntegration,
+    authorizePlatformIntegration,
+    serverUserId,
+    userName,
+  }
   return <AutomationContext.Provider value={value}>{children}</AutomationContext.Provider>
 }

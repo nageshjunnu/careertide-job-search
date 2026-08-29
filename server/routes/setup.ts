@@ -117,3 +117,23 @@ setupRouter.patch('/settings', async (request, response, next) => {
     response.json({ updated: true, settings: { schedule, timezone, dailyLimit, minimumScore, locations } })
   } catch (error) { await client.query('ROLLBACK'); next(error) } finally { client.release() }
 })
+
+setupRouter.patch('/profile', async (request, response, next) => {
+  try {
+    const { userId, roles, experience, resumeName } = request.body
+    if (!userId) return response.status(400).json({ message: 'Candidate User ID is required.' })
+
+    await database.query(
+      `INSERT INTO career_profiles (user_id, roles, experience, resume_name, updated_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT(user_id) DO UPDATE SET
+         roles = COALESCE($2, career_profiles.roles),
+         experience = COALESCE($3, career_profiles.experience),
+         resume_name = COALESCE($4, career_profiles.resume_name),
+         updated_at = NOW()`,
+      [userId, roles || null, experience || null, resumeName || null]
+    )
+
+    response.json({ updated: true, roles, experience, resumeName })
+  } catch (error) { next(error) }
+})

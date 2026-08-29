@@ -24,6 +24,17 @@ export const serverConfig = {
     keySecret: (process.env.RAZORPAY_KEY_SECRET ?? '').trim(),
     monthlyPlanId: (process.env.RAZORPAY_MONTHLY_PLAN_ID ?? '').trim(),
   },
+  integrations: {
+    tokenEncryptionKey: (process.env.INTEGRATION_TOKEN_ENCRYPTION_KEY ?? '').trim(),
+    naukri: {
+      clientId: (process.env.NAUKRI_OAUTH_CLIENT_ID ?? '').trim(),
+      clientSecret: (process.env.NAUKRI_OAUTH_CLIENT_SECRET ?? '').trim(),
+      authorizeUrl: (process.env.NAUKRI_OAUTH_AUTHORIZE_URL ?? '').trim(),
+      tokenUrl: (process.env.NAUKRI_OAUTH_TOKEN_URL ?? '').trim(),
+      redirectUri: (process.env.NAUKRI_OAUTH_REDIRECT_URI ?? '').trim(),
+      scopes: (process.env.NAUKRI_OAUTH_SCOPES ?? '').trim(),
+    },
+  },
   admin: {
     email: (process.env.ADMIN_EMAIL ?? '').trim().toLowerCase(),
     password: process.env.ADMIN_PASSWORD ?? '',
