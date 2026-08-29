@@ -119,7 +119,8 @@ app.post('/api/email/resend-steps/:userId', async (request, response, next) => {
 })
 app.use((error: Error, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
   console.error(error)
-  response.status(500).json({ message: error.message || 'Unexpected server error' })
+  const databaseConfigurationError = error.message.includes('DATABASE_URL is missing')
+  response.status(databaseConfigurationError ? 503 : 500).json({ message: error.message || 'Unexpected server error' })
 })
 
 if (!process.env.VERCEL) {
