@@ -199,6 +199,9 @@ app.get('/api/admin/pricing', requireAdmin, async (_request: AdminRequest, respo
     response.json({ pricing: { monthlyMembershipAmount: values.monthly_membership_amount ?? 1000, includedJobs: values.included_jobs ?? 100, extraJobAmount: values.extra_job_amount ?? 10, firstConnectionAmount: values.first_connection_amount ?? 100, accountChangeAmount: values.account_change_amount ?? 500 } })
   } catch (error) { next(error) }
 })
+app.get('/api/admin/payments', requireAdmin, async (_request: AdminRequest, response, next) => {
+  try { const payments = await database.query(`SELECT p.id,p.payment_id,p.amount,p.mode,p.status,p.verified_at,p.created_at,u.full_name,u.email,COALESCE(CEIL(p.amount/1000.0),1)::int months_covered FROM payments p LEFT JOIN users u ON u.id=p.user_id ORDER BY p.created_at DESC LIMIT 200`); response.json({ payments: payments.rows }) } catch (error) { next(error) }
+})
 app.patch('/api/admin/pricing', requireAdmin, async (request: AdminRequest, response, next) => {
   try {
     const entries = Object.entries(request.body as Record<string, unknown>).filter(([key, value]) => ['monthlyMembershipAmount', 'includedJobs', 'extraJobAmount', 'firstConnectionAmount', 'accountChangeAmount'].includes(key) && Number.isInteger(value) && Number(value) >= 0)
@@ -779,8 +782,10 @@ app.post('/api/payments/webhooks/:gateway', async (request, response, next) => {
     response.json({ received: true, gateway })
   } catch (error) { next(error) }
 })
-app.post('/api/payments/order', async (_request, response, next) => {
+app.post('/api/payments/order', async (request, response, next) => {
   try {
+    const requestedAmount = Number(request.body?.amount ?? 100000)
+    if (!Number.isInteger(requestedAmount) || requestedAmount < 10000) return response.status(400).json({ message: 'Payment amount must be at least ₹100.' })
     if (!serverConfig.razorpay.keyId || !serverConfig.razorpay.keySecret) {
       return response.status(503).json({ message: 'Razorpay billing is not configured. Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.' })
     }
@@ -799,7 +804,7 @@ app.post('/api/payments/order', async (_request, response, next) => {
           subscriptionId: subscription.id,
           orderId: null,
           checkoutKey: 'subscription_id',
-          amount: 100000,
+          amount: requestedAmount,
           currency: 'INR',
           keyId: serverConfig.razorpay.keyId,
           mode: 'test',
@@ -811,7 +816,7 @@ app.post('/api/payments/order', async (_request, response, next) => {
 
     // Direct Razorpay standard order (works on all Razorpay accounts)
     const order = await razorpay.orders.create({
-      amount: 100000,
+      amount: requestedAmount,
       currency: 'INR',
       receipt: `rcpt_${Date.now()}`,
       notes: { purpose: 'careertide_monthly_membership' },
@@ -828,8 +833,8 @@ app.post('/api/payments/order', async (_request, response, next) => {
     })
   } catch (error) { next(error) }
 })
-app.post('/api/payments/verify', (request, response) => {
-  const { razorpay_order_id: orderId, razorpay_subscription_id: subscriptionId, razorpay_payment_id: paymentId, razorpay_signature: signature } = request.body
+app.post('/api/payments/verify', async (request, response) => {
+  const { razorpay_order_id: orderId, razorpay_subscription_id: subscriptionId, razorpay_payment_id: paymentId, razorpay_signature: signature, userId, amount = 100000 } = request.body
   if (!paymentId || !signature || !serverConfig.razorpay.keySecret) {
     return response.status(400).json({ verified: false, message: 'Payment verification data is incomplete.' })
   }
@@ -844,6 +849,11 @@ app.post('/api/payments/verify', (request, response) => {
   }
 
   const verified = expected.length === signature.length && timingSafeEqual(Buffer.from(expected), Buffer.from(signature))
+  if (verified && userId) {
+    const months = Math.max(1, Math.floor(Number(amount) / 100000))
+    await database.query(`INSERT INTO payments (user_id,payment_id,amount,mode,status,verified_at) VALUES ($1,$2,$3,'test','verified',NOW()) ON CONFLICT(payment_id) DO NOTHING`, [userId, paymentId, Math.round(Number(amount) / 100)])
+    await database.query(`INSERT INTO candidate_billing (user_id,status,period_end,advance_months,included_jobs,used_jobs,updated_at) VALUES ($1,'active',NOW()+($2 * INTERVAL '1 month'),$2,$2*100,0,NOW()) ON CONFLICT(user_id) DO UPDATE SET status='active',period_end=GREATEST(COALESCE(candidate_billing.period_end,NOW()),NOW())+($2 * INTERVAL '1 month'),advance_months=candidate_billing.advance_months+$2,included_jobs=candidate_billing.included_jobs+$2*100,updated_at=NOW()`, [userId, months])
+  }
   response.status(verified ? 200 : 400).json({ verified, paymentId, subscriptionId: subscriptionId ?? null, orderId: orderId ?? null, mode: 'test' })
 })
 app.post('/api/email/test', async (request, response, next) => {

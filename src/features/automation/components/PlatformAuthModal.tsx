@@ -169,10 +169,10 @@ export function PlatformAuthModal({ source, userId, onClose, onSuccess }: Platfo
           {authMode === 'oauth' ? (
             <div className="platform-oauth-view">
               <label className="platform-field">
-                <span>{source} Candidate Email or Account ID</span>
+                <span>New {source} account email</span>
                 <input
-                  type="email"
-                  placeholder="e.g. candidate@example.com"
+                  type="text"
+                  placeholder="Enter the new account email"
                   value={accountEmail}
                   onChange={(e) => setAccountEmail(e.target.value)}
                 />

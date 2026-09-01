@@ -359,7 +359,7 @@ function AdminContent({
         <Panel title="Payment gateway configuration" subtitle="Choose enabled providers, test/live mode, API credentials, and webhook URLs.">
           <PaymentGatewayManager gateways={paymentGateways} onUpdate={onUpdatePaymentGateway} />
         </Panel>
-        <Panel title="Membership controls" subtitle="Control candidate subscription availability and included application limits."><MembershipControls token={token} /></Panel>
+        <Panel title="Membership controls" subtitle="Control candidate subscription availability and included application limits."><MembershipControls token={token} /></Panel><Panel title="Candidate payment history" subtitle="Every candidate payment, advance month, gateway mode, and verification status."><PaymentHistory token={token} /></Panel>
       </section>
     )
   }
@@ -548,6 +548,11 @@ function MembershipControls({ token }: { token: string }) {
   const set = (key: string, value: string) => setValues((current) => ({ ...current, [key]: value }))
   const save = async () => { await adminApi.updateSettings(token, values); setMessage('Membership controls saved.') }
   return <div className="admin-settings-form"><section><h3>Candidate membership</h3><label className="admin-checkbox"><input type="checkbox" checked={values.monthly_membership_enabled !== 'false'} onChange={(event) => set('monthly_membership_enabled', String(event.target.checked))} /> Enable monthly membership for candidates</label><label>Monthly price (₹)<input type="number" value={values.monthly_membership_amount ?? '1000'} onChange={(event) => set('monthly_membership_amount', event.target.value)} /></label><label>Included applications<input type="number" value={values.included_jobs ?? '100'} onChange={(event) => set('included_jobs', event.target.value)} /></label></section><section><h3>Advance plans & usage</h3><label>Quarterly price (₹)<input type="number" value={values.quarterly_membership_amount ?? '3000'} onChange={(event) => set('quarterly_membership_amount', event.target.value)} /></label><label>Yearly price (₹)<input type="number" value={values.yearly_membership_amount ?? '12000'} onChange={(event) => set('yearly_membership_amount', event.target.value)} /></label><label>Extra job price (₹)<input type="number" value={values.extra_job_amount ?? '10'} onChange={(event) => set('extra_job_amount', event.target.value)} /></label><button className="admin-save" onClick={() => void save()}>Save membership controls</button>{message && <small>{message}</small>}</section></div>
+}
+function PaymentHistory({ token }: { token: string }) {
+  const [payments, setPayments] = useState<Array<{ id: number; payment_id: string; amount: number; mode: string; status: string; verified_at: string | null; created_at: string; full_name: string | null; email: string | null; months_covered: number }>>([])
+  useEffect(() => { void adminApi.payments(token).then(({ payments: rows }) => setPayments(rows)).catch(() => {}) }, [token])
+  return <div className="admin-table-wrap"><table><thead><tr><th>Candidate</th><th>Amount</th><th>Months</th><th>Gateway mode</th><th>Status</th><th>Paid date</th></tr></thead><tbody>{payments.map((payment) => <tr key={payment.id}><td><strong>{payment.full_name || 'Unknown'}</strong><small>{payment.email || '—'}</small></td><td>₹{Number(payment.amount).toLocaleString('en-IN')}</td><td>{payment.months_covered}</td><td>{payment.mode}</td><td><span className={`admin-status ${payment.status}`}>{payment.status}</span></td><td>{new Date(payment.verified_at || payment.created_at).toLocaleString()}</td></tr>)}{!payments.length && <tr><td colSpan={6}>No candidate payments recorded yet.</td></tr>}</tbody></table></div>
 }
 
 function CronScheduleManager({ schedules, onUpdate }: { schedules: JobRunSchedule[]; onUpdate: (id: number, payload: { cronExpression?: string; active?: boolean; timezone?: string }) => Promise<void> }) {
