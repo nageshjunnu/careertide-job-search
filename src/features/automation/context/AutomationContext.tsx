@@ -13,7 +13,7 @@ export function AutomationProvider({ children }: { children: ReactNode }) {
   const [statusChanging, setStatusChanging] = useState(false)
   const [applications, setApplications] = useState<TrackedApplication[]>([])
   const [metrics, setMetrics] = useState({ discovered: 0, matched: 0, applied: 0, interviews: 0 })
-  const [runs, setRuns] = useState<Array<{ id: number; status: string; discovered: number; matched: number; error: string | null; startedAt: string }>>([])
+  const [runs, setRuns] = useState<Array<{ id: number; status: string; discovered: number; matched: number; error: string | null; startedAt: string; email: string }>>([])
   const [runProgress, setRunProgress] = useState<{ running: boolean; status: string; stage: string; percent: number } | null>(null)
   const [sourceWorkflows, setSourceWorkflows] = useState<Array<{ source: string; status: string; detail: string; permissionStatus: string; requestedAt: string | null }>>([])
   const [serverUserId, setServerUserId] = useState('')
@@ -49,7 +49,7 @@ export function AutomationProvider({ children }: { children: ReactNode }) {
       if (dashboard.latestRun?.status === 'completed' && dashboard.latestRun.finished_at && Date.now() - new Date(dashboard.latestRun.finished_at).getTime() < 8_000) return { running: false, status: 'completed', stage: dashboard.latestRun.progress_stage || 'Career intelligence pipeline updated', percent: 100 }
       return null
     })
-    setRuns(dashboard.runs.map((run) => ({ id: run.id, status: run.status, discovered: run.jobs_discovered, matched: run.jobs_matched, error: run.error_message, startedAt: run.started_at })))
+    setRuns(dashboard.runs.map((run) => ({ id: run.id, status: run.status, discovered: run.jobs_discovered, matched: run.jobs_matched, error: run.error_message, startedAt: run.started_at, email: run.email })))
     setSourceWorkflows(dashboard.sourceWorkflows.map((source) => ({ source: source.source, status: source.status, detail: source.detail, permissionStatus: source.permission_status, requestedAt: source.requested_at })))
     setStatus(dashboard.workflowStatus === 'paused' ? 'paused' : 'active')
     setLastRefreshed(new Date())
@@ -116,6 +116,7 @@ export function AutomationProvider({ children }: { children: ReactNode }) {
     await setupApi.authorizePlatformIntegration(serverUserId, source, payload)
     await refreshDashboard()
   }
+  const updateSourceStatus = async (source: string, enabled: boolean) => { if (!serverUserId) throw new Error('Server user is missing'); await setupApi.updateSourceStatus(serverUserId, source, enabled); await refreshDashboard() }
   const value = {
     status,
     toggleStatus,
@@ -139,6 +140,7 @@ export function AutomationProvider({ children }: { children: ReactNode }) {
     triggerSearchRun,
     requestPlatformIntegration,
     authorizePlatformIntegration,
+    updateSourceStatus,
     serverUserId,
     userName,
   }

@@ -61,7 +61,7 @@ export function Header({ location, onNavigate }: { location: string; onNavigate:
       </div>
     </header>
     <nav className="navbar">
-      <button className="brand" onClick={() => { closeMobileMenu(); onNavigate('home') }} type="button"><span className="brand-mark">CT</span>CareerTide</button>
+      <button className="brand" onClick={() => { closeMobileMenu(); onNavigate('home') }} type="button"><span className="brand-mark">SB</span>SkillBridge</button>
       <div className="nav-links">
         {pages.map((page) => <NavLink className={({ isActive }) => isActive ? 'active' : ''} end={page === 'home'} key={page} to={PAGE_PATHS[page]}>{pageLabels[page]}</NavLink>)}
         {candidateName ? (

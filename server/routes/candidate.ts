@@ -24,7 +24,7 @@ async function createCandidateSession(userId: string) {
   const token = randomBytes(32).toString('hex')
   const tokenHashed = hashToken(token)
   await database.query(
-    `INSERT INTO candidate_sessions (token_hash, user_id, expires_at) VALUES ($1, $2, NOW() + INTERVAL '30 days')`,
+    `INSERT INTO candidate_sessions (token_hash, user_id, expires_at) VALUES ($1, $2, NOW() + INTERVAL '1 hour')`,
     [tokenHashed, userId]
   )
   return token
@@ -301,7 +301,8 @@ candidateRouter.get('/me', async (request, response, next) => {
     }
 
     const userId = session.rows[0].user_id
-    void database.query(`UPDATE candidate_sessions SET last_seen_at=NOW() WHERE token_hash=$1`, [hashToken(token)])
+    // Sliding expiry: any authenticated activity extends the session by one hour.
+    void database.query(`UPDATE candidate_sessions SET last_seen_at=NOW(), expires_at=NOW() + INTERVAL '1 hour' WHERE token_hash=$1`, [hashToken(token)])
 
     const fullRecord = await getCandidateFullRecord(userId)
     if (!fullRecord) return response.status(404).json({ message: 'Candidate not found.' })

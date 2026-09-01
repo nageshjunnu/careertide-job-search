@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '../../../components/common/Button'
 import { ApplicationsTable } from '../components/ApplicationsTable'
@@ -7,6 +7,7 @@ import { WorkflowCanvas } from '../components/WorkflowCanvas'
 import { PlatformAuthModal } from '../components/PlatformAuthModal'
 import { CandidateProfileEditModal } from '../components/CandidateProfileEditModal'
 import { useAutomation } from '../context/useAutomation'
+import { setupApi } from '../services/setup.api'
 const platformIcons: Record<string, string> = {
   LinkedIn: '💼',
   Naukri: '⚡',
@@ -43,16 +44,29 @@ export function AutomationDashboard() {
     triggerSearchRun,
     serverUserId,
     userName,
+    updateSourceStatus,
   } = useAutomation()
 
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState<'pipeline' | 'activity'>('pipeline')
+  const [activeTab, setActiveTab] = useState<'pipeline' | 'applied' | 'activity'>('pipeline')
   const [authModalSource, setAuthModalSource] = useState<string | null>(null)
   const [profileModalOpen, setProfileModalOpen] = useState(false)
   const [batchApplying, setBatchApplying] = useState(false)
   const [runningDiscovery, setRunningDiscovery] = useState(false)
+  const [billing, setBilling] = useState<{ status: string; period_end: string | null; advance_months: number; included_jobs: number; used_jobs: number } | null>(null)
+  const [billingMessage, setBillingMessage] = useState('')
+  const [cancelOpen, setCancelOpen] = useState(false)
+  const [cancelReason, setCancelReason] = useState('Received a job offer')
+  const [cancelNote, setCancelNote] = useState('')
+  const [accountChangeSource, setAccountChangeSource] = useState<string | null>(null)
+  const [accountOtp, setAccountOtp] = useState('')
+  const [accountOtpSent, setAccountOtpSent] = useState(false)
+  const [accountChangeMessage, setAccountChangeMessage] = useState('')
+  const [accountChangeStep, setAccountChangeStep] = useState<'payment' | 'sending_otp' | 'otp' | 'verifying'>('payment')
+  useEffect(() => { if (serverUserId) void setupApi.billingStatus(serverUserId).then(({ billing }) => setBilling(billing)).catch(() => {}) }, [serverUserId])
 
   const reviewMatches = applications.filter((app) => app.status === 'Review required')
+  const appliedMatches = applications.filter((app) => app.status === 'Applied' || app.status === 'Interview' || app.status === 'Failed')
 
   const handleBatchApply = async () => {
     if (!reviewMatches.length) return
@@ -181,7 +195,7 @@ export function AutomationDashboard() {
               <p>Automated multi-source search and smart 1-Click application pipeline.</p>
             </div>
             <Button variant="ghost" onClick={() => setSettingsOpen((open) => !open)}>
-              {settingsOpen ? 'Close editor' : 'Edit search plan'}
+              {settingsOpen ? 'Close editor' : 'Edit AI job automation & apply settings'}
             </Button>
           </header>
           {settingsOpen && (
@@ -207,7 +221,7 @@ export function AutomationDashboard() {
               <li>✓ 1-Click apply & tracker enabled</li>
               <li>✓ Direct OAuth platform authorization</li>
             </ul>
-            {depositVerified ? <div className="verified-payment">✓ Monthly plan verified</div> : <Button onClick={verifyDeposit}>Review membership</Button>}
+            {depositVerified ? <><div className="verified-payment">✓ Monthly plan verified {billing?.period_end ? `· active until ${new Date(billing.period_end).toLocaleDateString()}` : ''}</div><small>{billing ? `${Math.max(0, billing.included_jobs - billing.used_jobs)} included applications remaining · ${billing.advance_months} paid month(s)` : ''}</small><Button variant="ghost" onClick={() => setCancelOpen(true)}>{billing?.status === 'cancel_at_period_end' ? 'Cancellation scheduled' : 'Cancel payment renewal'}</Button>{billingMessage && <small>{billingMessage}</small>}</> : <Button onClick={verifyDeposit}>Review membership</Button>}
           </article>
           <article className="automation-panel automation-rules">
             <header>
@@ -290,6 +304,7 @@ export function AutomationDashboard() {
                           Connect & Authorize ⚡
                         </button>
                       )}
+                      <div className="platform-source-actions"><button className="workflow-control" onClick={() => void updateSourceStatus(workflow.source, workflow.status === 'paused')} type="button">{workflow.status === 'paused' ? 'Enable source' : 'Disable source'}</button>{isConnected && <button className="workflow-control" onClick={() => { setAccountChangeSource(workflow.source); setAccountOtpSent(false); setAccountChangeStep('payment'); setAccountChangeMessage('') }} type="button">Change account</button>}</div>
                     </div>
                   </article>
                 )
@@ -305,7 +320,7 @@ export function AutomationDashboard() {
         <header className="pipeline-header">
           <div>
             <span>LIVE OPPORTUNITY PIPELINE</span>
-            <h2>Your Opportunity Pipeline</h2>
+            <h2>Your Job Applications & Activity</h2>
             <small>{lastRefreshed ? `Updated ${lastRefreshed.toLocaleTimeString()}` : 'Loading latest results…'}</small>
           </div>
           <div className="pipeline-controls">
@@ -321,6 +336,7 @@ export function AutomationDashboard() {
             <div className="automation-tabs">
               <button onClick={() => void refreshDashboard()}>↻ Refresh</button>
               <button className={activeTab === 'pipeline' ? 'active' : ''} onClick={() => setActiveTab('pipeline')}>Review queue ({applications.length})</button>
+              <button className={activeTab === 'applied' ? 'active' : ''} onClick={() => setActiveTab('applied')}>Applied jobs ({appliedMatches.length})</button>
               <button className={activeTab === 'activity' ? 'active' : ''} onClick={() => setActiveTab('activity')}>Run activity ({runs.length})</button>
             </div>
           </div>
@@ -331,14 +347,17 @@ export function AutomationDashboard() {
             onMarkApplied={markApplied}
             onApply={applyToMatch}
           />
+        ) : activeTab === 'applied' ? (
+          <ApplicationsTable applications={appliedMatches} onMarkApplied={markApplied} onApply={applyToMatch} />
         ) : (
-          <div className="run-log">
+          <div className="run-activity-cards">
             {runs.map((run) => (
-              <div key={run.id}>
-                <time>{new Date(run.startedAt).toLocaleTimeString()}</time>
-                <i className={run.status === 'completed' ? 'success' : 'pending'} />
-                <span>Run #{run.id}: {run.status} · {run.discovered} checked · {run.matched} matched{run.error ? ` · ${run.error}` : ''}</span>
-              </div>
+              <article key={run.id} className={`run-activity-card ${run.status}`}>
+                <div className="run-activity-heading"><span className={`run-activity-status ${run.status}`}>{run.status === 'completed' ? 'Completed' : run.status}</span><time>{new Date(run.startedAt).toLocaleString()}</time></div>
+                <strong>Job search run #{run.id}</strong><small>Candidate: {run.email}</small>
+                <dl><div><dt>Jobs checked</dt><dd>{run.discovered}</dd></div><div><dt>Strong matches</dt><dd>{run.matched}</dd></div></dl>
+                {run.error && <p className="run-activity-error">{run.error}</p>}
+              </article>
             ))}
             {!runs.length && <p>No genuine runs recorded yet.</p>}
           </div>
@@ -346,5 +365,7 @@ export function AutomationDashboard() {
       </section>
       <p className="automation-safety">CareerTide connects to verified platforms and feeds. Apply with 1-Click or review directly on the hiring platform to track every application in your pipeline.</p>
     </main>
+    {cancelOpen && <div className="admin-modal-backdrop"><section className="admin-manager"><h2>Stop membership renewal?</h2><p>Your AI job automation, source access, and applications remain active until your current paid period ends. From the next month, all plans will be disabled until you make a new payment.</p><label className="setup-field"><span>Why are you stopping?</span><select value={cancelReason} onChange={(event) => setCancelReason(event.target.value)}><option>Received a job offer</option><option>Not interested at this time</option><option>Found a job through another source</option><option>Price or budget reason</option><option>Other</option></select></label><label className="setup-field"><span>Message (optional)</span><input value={cancelNote} onChange={(event) => setCancelNote(event.target.value)} placeholder="Tell us how we can improve" /></label><div className="admin-user-actions"><Button variant="ghost" onClick={() => setCancelOpen(false)}>Keep my plan</Button><Button onClick={() => { if (!serverUserId) return; void setupApi.cancelBilling(serverUserId).then((result) => { setBillingMessage(`${result.message} Reason recorded: ${cancelReason}.`); setCancelOpen(false); return setupApi.billingStatus(serverUserId) }).then(({ billing }) => setBilling(billing)) }}>Stop after this period</Button></div></section></div>}
+    {accountChangeSource && <div className="admin-modal-backdrop"><section className="admin-manager"><h2>Change {accountChangeSource} account</h2><div className="account-change-progress"><span className={accountChangeStep === 'payment' ? 'active' : 'done'}>1. Payment · ₹500</span><span className={accountChangeStep === 'otp' || accountChangeStep === 'verifying' ? 'active' : ''}>2. Email OTP</span><span>3. New account</span></div>{accountChangeStep === 'payment' && <><p>Pay ₹500 to request an account change. After verified payment, we will send an OTP to your registered email.</p><Button onClick={() => { setAccountChangeStep('sending_otp'); setAccountChangeMessage('Payment verification is required before the OTP can be sent.') }}>Continue to secure payment</Button></>}{accountChangeStep === 'sending_otp' && <><p className="setup-error">{accountChangeMessage}</p><Button onClick={() => { if (!serverUserId) return; void setupApi.requestAccountChangeOtp(serverUserId, accountChangeSource).then((result) => { setAccountOtpSent(true); setAccountChangeStep('otp'); setAccountChangeMessage(result.message) }).catch((error) => { setAccountChangeStep('payment'); setAccountChangeMessage(error.message) }) }}>Payment verified — send OTP</Button></>}{accountOtpSent && <><label className="setup-field"><span>Email verification OTP</span><input value={accountOtp} onChange={(event) => setAccountOtp(event.target.value)} inputMode="numeric" maxLength={6} placeholder="6-digit code" /></label><small>{accountChangeMessage}</small><Button disabled={accountChangeStep === 'verifying'} onClick={() => { if (!serverUserId) return; setAccountChangeStep('verifying'); void setupApi.verifyAccountChangeOtp(serverUserId, accountChangeSource, accountOtp).then(() => { setAuthModalSource(accountChangeSource); setAccountChangeSource(null) }).catch((error) => { setAccountChangeStep('otp'); setAccountChangeMessage(error.message) }) }}>{accountChangeStep === 'verifying' ? 'Verifying OTP…' : 'Verify OTP & continue'}</Button></>}<Button variant="ghost" onClick={() => setAccountChangeSource(null)}>Cancel</Button></section></div>}
   </>
 }

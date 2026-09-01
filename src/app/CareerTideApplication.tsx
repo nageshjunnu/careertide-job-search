@@ -548,7 +548,7 @@ function App() {
 function RoutedApp() {
   const navigate = useNavigate()
   const routeLocation = useLocation()
-  const isAdminRoute = routeLocation.pathname === '/admin'
+  const isAdminRoute = routeLocation.pathname.startsWith('/admin')
   const [waves, setWaves] = useState<WaveRipple[]>([])
   const { query, setQuery, location, setLocation, experience, setExperience } = useSearch()
   const [sourceFilter, setSourceFilter] = useState('All')
@@ -677,6 +677,8 @@ function RoutedApp() {
         <Route path="/login" element={<CandidateLoginPage />} />
         <Route path="/candidate-login" element={<CandidateLoginPage />} />
         <Route path="/admin" element={<AdminPage />} />
+        <Route path="/admin/:section" element={<AdminPage />} />
+        <Route path="/admin/analytics/:candidateId" element={<AdminPage />} />
         <Route path="/companies" element={<CompaniesPage jobs={jobs} />} />
         <Route path="/sources" element={<SourcesPage query={query} location={location} setQuery={setQuery} setPage={setPage} />} />
         <Route path="/workflows" element={<WorkflowsPage />} />

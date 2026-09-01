@@ -54,6 +54,8 @@ setupRouter.post('/payment', async (request, response, next) => {
   try {
     const { userId, paymentId, amount = 1000, mode = 'test' } = request.body
     await database.query(`INSERT INTO payments (user_id,payment_id,amount,mode,status,verified_at) VALUES ($1,$2,$3,$4,'verified',NOW()) ON CONFLICT(payment_id) DO NOTHING`, [userId, paymentId, amount, mode])
+    const months = Math.max(1, Math.floor(Number(amount) / 1000))
+    await database.query(`INSERT INTO candidate_billing (user_id,status,period_end,advance_months,included_jobs,used_jobs,updated_at) VALUES ($1,'active',NOW() + ($2 * INTERVAL '1 month'),$2,100,0,NOW()) ON CONFLICT(user_id) DO UPDATE SET status='active',period_end=GREATEST(COALESCE(candidate_billing.period_end,NOW()),NOW()) + ($2 * INTERVAL '1 month'),advance_months=candidate_billing.advance_months+$2,updated_at=NOW()`, [userId, months])
     const paymentMessage = mode === 'live'
       ? 'Congratulations — your ₹1,000 monthly CareerTide membership payment was verified. Complete the remaining setup steps and we will prepare your Career Assistant.'
       : 'Congratulations — your ₹1,000 monthly CareerTide membership was verified in Razorpay Test Mode. No real money was charged. Complete the remaining setup steps and we will prepare your Career Assistant.'

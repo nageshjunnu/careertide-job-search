@@ -304,7 +304,7 @@ export async function runGuidedSearch(userId: string) {
         userId,
         config.email,
         config.full_name,
-        'CareerTide Job Run Complete',
+        'Job search run',
         `<strong>Opportunities checked:</strong> ${discovered}<br>
          <strong>Strong matches found:</strong> ${matched}<br>
          <strong>Active sources queried:</strong> ${config.sources.join(', ')}<br><br>

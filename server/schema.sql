@@ -3,6 +3,15 @@ CREATE TABLE IF NOT EXISTS career_profiles (user_id UUID PRIMARY KEY REFERENCES 
 ALTER TABLE career_profiles ADD COLUMN IF NOT EXISTS salary_expectation TEXT;
 CREATE TABLE IF NOT EXISTS onboarding_progress (user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,current_step TEXT NOT NULL DEFAULT 'user',completed_steps TEXT[] NOT NULL DEFAULT '{}',is_complete BOOLEAN NOT NULL DEFAULT FALSE,updated_at TIMESTAMPTZ DEFAULT NOW());
 CREATE TABLE IF NOT EXISTS payments (id BIGSERIAL PRIMARY KEY,user_id UUID REFERENCES users(id) ON DELETE CASCADE,payment_id TEXT UNIQUE NOT NULL,amount INTEGER NOT NULL,mode TEXT NOT NULL,status TEXT NOT NULL,verified_at TIMESTAMPTZ,created_at TIMESTAMPTZ DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS payment_gateways (name TEXT PRIMARY KEY,enabled BOOLEAN NOT NULL DEFAULT FALSE,mode TEXT NOT NULL DEFAULT 'test',config JSONB NOT NULL DEFAULT '{}'::jsonb,updated_at TIMESTAMPTZ DEFAULT NOW());
+ALTER TABLE payment_gateways ADD COLUMN IF NOT EXISTS is_default BOOLEAN NOT NULL DEFAULT FALSE;
+CREATE TABLE IF NOT EXISTS job_run_schedules (id BIGSERIAL PRIMARY KEY,name TEXT NOT NULL,cron_expression TEXT NOT NULL,active BOOLEAN NOT NULL DEFAULT TRUE,timezone TEXT NOT NULL DEFAULT 'Asia/Kolkata',created_at TIMESTAMPTZ DEFAULT NOW(),updated_at TIMESTAMPTZ DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS site_settings (key TEXT PRIMARY KEY,value TEXT NOT NULL,updated_at TIMESTAMPTZ DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS candidate_billing (user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,status TEXT NOT NULL DEFAULT 'active',period_end TIMESTAMPTZ,advance_months INTEGER NOT NULL DEFAULT 0,included_jobs INTEGER NOT NULL DEFAULT 100,used_jobs INTEGER NOT NULL DEFAULT 0,updated_at TIMESTAMPTZ DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS source_pricing (source TEXT PRIMARY KEY,enabled BOOLEAN NOT NULL DEFAULT TRUE,first_connection_amount INTEGER NOT NULL DEFAULT 100,account_change_amount INTEGER NOT NULL DEFAULT 500,job_amount INTEGER NOT NULL DEFAULT 10,updated_at TIMESTAMPTZ DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS source_change_otps (id BIGSERIAL PRIMARY KEY,user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,source TEXT NOT NULL,code_hash TEXT NOT NULL,expires_at TIMESTAMPTZ NOT NULL,verified_at TIMESTAMPTZ,created_at TIMESTAMPTZ DEFAULT NOW());
+INSERT INTO site_settings (key,value) VALUES ('brand_name','SkillBridge') ON CONFLICT (key) DO NOTHING;
+INSERT INTO job_run_schedules (name,cron_expression,active,timezone) SELECT 'Candidate job discovery','*/5 * * * *',TRUE,'Asia/Kolkata' WHERE NOT EXISTS (SELECT 1 FROM job_run_schedules WHERE name='Candidate job discovery');
 CREATE TABLE IF NOT EXISTS career_workflows (user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,schedule TEXT NOT NULL,timezone TEXT NOT NULL DEFAULT 'Asia/Kolkata',sources TEXT[] NOT NULL,minimum_score INTEGER NOT NULL,daily_limit INTEGER NOT NULL,status TEXT NOT NULL,last_run_at TIMESTAMPTZ,created_at TIMESTAMPTZ DEFAULT NOW(),updated_at TIMESTAMPTZ DEFAULT NOW());
 CREATE TABLE IF NOT EXISTS application_preferences (user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,review_required BOOLEAN NOT NULL,retries INTEGER NOT NULL,updated_at TIMESTAMPTZ DEFAULT NOW());
 CREATE TABLE IF NOT EXISTS notification_preferences (user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,email_notifications BOOLEAN NOT NULL,daily_summary BOOLEAN NOT NULL,updated_at TIMESTAMPTZ DEFAULT NOW());
@@ -18,8 +27,12 @@ CREATE TABLE IF NOT EXISTS source_workflows (id BIGSERIAL PRIMARY KEY,user_id UU
 CREATE TABLE IF NOT EXISTS platform_integrations (id BIGSERIAL PRIMARY KEY,user_id UUID REFERENCES users(id) ON DELETE CASCADE,source TEXT NOT NULL,permission_status TEXT NOT NULL DEFAULT 'not_requested',requested_at TIMESTAMPTZ,connected_at TIMESTAMPTZ,last_checked_at TIMESTAMPTZ,created_at TIMESTAMPTZ DEFAULT NOW(),updated_at TIMESTAMPTZ DEFAULT NOW(),UNIQUE(user_id,source));
 ALTER TABLE platform_integrations ADD COLUMN IF NOT EXISTS oauth_state_hash TEXT;
 ALTER TABLE platform_integrations ADD COLUMN IF NOT EXISTS oauth_state_expires_at TIMESTAMPTZ;
-ALTER TABLE platform_integrations ADD COLUMN IF NOT EXISTS access_token_encrypted TEXT;
 ALTER TABLE platform_integrations ADD COLUMN IF NOT EXISTS refresh_token_encrypted TEXT;
+INSERT INTO payment_gateways (name, enabled, mode, config) VALUES
+  ('razorpay', TRUE, 'test', '{}'), ('stripe', FALSE, 'test', '{}'),
+  ('payu', FALSE, 'test', '{}'), ('cashfree', FALSE, 'test', '{}'), ('phonepe', FALSE, 'test', '{}')
+ON CONFLICT (name) DO NOTHING;
+ALTER TABLE platform_integrations ADD COLUMN IF NOT EXISTS access_token_encrypted TEXT;
 ALTER TABLE platform_integrations ADD COLUMN IF NOT EXISTS token_expires_at TIMESTAMPTZ;
 CREATE TABLE IF NOT EXISTS job_contact_checks (id BIGSERIAL PRIMARY KEY,user_id UUID REFERENCES users(id) ON DELETE CASCADE,job_id BIGINT REFERENCES discovered_jobs(id) ON DELETE CASCADE,contact_email TEXT,status TEXT NOT NULL,checked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ DEFAULT NOW(),UNIQUE(user_id,job_id));
 CREATE TABLE IF NOT EXISTS admin_sessions (id BIGSERIAL PRIMARY KEY,token_hash TEXT UNIQUE NOT NULL,admin_email TEXT NOT NULL,expires_at TIMESTAMPTZ NOT NULL,created_at TIMESTAMPTZ DEFAULT NOW(),last_seen_at TIMESTAMPTZ DEFAULT NOW());
@@ -30,3 +43,6 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
 CREATE TABLE IF NOT EXISTS candidate_sessions (id BIGSERIAL PRIMARY KEY,token_hash TEXT UNIQUE NOT NULL,user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,expires_at TIMESTAMPTZ NOT NULL,created_at TIMESTAMPTZ DEFAULT NOW(),last_seen_at TIMESTAMPTZ DEFAULT NOW());
 ALTER TABLE platform_integrations ADD COLUMN IF NOT EXISTS scopes TEXT;
 ALTER TABLE platform_integrations ADD COLUMN IF NOT EXISTS account_identifier TEXT;
+CREATE TABLE IF NOT EXISTS platform_dispatch_configs (source TEXT PRIMARY KEY,mode TEXT NOT NULL DEFAULT 'recruiter_email',auto_dispatch BOOLEAN NOT NULL DEFAULT TRUE,updated_at TIMESTAMPTZ DEFAULT NOW());
+ALTER TABLE platform_dispatch_configs ADD COLUMN IF NOT EXISTS api_key TEXT;
+ALTER TABLE platform_dispatch_configs ADD COLUMN IF NOT EXISTS api_secret TEXT;

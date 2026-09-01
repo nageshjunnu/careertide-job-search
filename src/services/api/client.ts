@@ -20,7 +20,16 @@ export async function makeApiCall<T>(url: string, options: ApiOptions = {}): Pro
 
   try {
     const response = await fetch(url, { ...requestOptions, signal: controller.signal })
-    if (!response.ok) throw new ApiError(`Request failed with status ${response.status}`, response.status)
+    if (!response.ok) {
+      if (response.status === 401 && options.headers && new Headers(options.headers).has('Authorization')) {
+        localStorage.removeItem('candidate_token')
+        localStorage.removeItem('candidate_user_id')
+        localStorage.removeItem('candidate_name')
+        localStorage.removeItem('candidate_email')
+        window.dispatchEvent(new Event('candidate_auth_change'))
+      }
+      throw new ApiError(`Request failed with status ${response.status}`, response.status)
+    }
     return await response.json() as T
   } catch (error) {
     if (error instanceof ApiError) throw error

@@ -1,4 +1,5 @@
 import cron from 'node-cron'
+import type { ScheduledTask } from 'node-cron'
 import { database } from './database.js'
 import { runGuidedSearch } from './career-runner.js'
 
@@ -18,8 +19,20 @@ export async function runScheduledSearches() {
   return { claimed: due.rows.length }
 }
 
+const scheduledTasks = new Map<number, ScheduledTask>()
+
+export async function refreshJobSchedules() {
+  const schedules = await database.query<{ id: number; cron_expression: string; active: boolean }>(`SELECT id,cron_expression,active FROM job_run_schedules`)
+  const activeIds = new Set(schedules.rows.filter((item) => item.active).map((item) => item.id))
+  for (const [id, task] of scheduledTasks) if (!activeIds.has(id)) { task.stop(); scheduledTasks.delete(id) }
+  for (const schedule of schedules.rows) {
+    if (!schedule.active || scheduledTasks.has(schedule.id) || !cron.validate(schedule.cron_expression)) continue
+    scheduledTasks.set(schedule.id, cron.schedule(schedule.cron_expression, () => {
+      void runScheduledSearches().catch((error) => console.error('Scheduled job run failed:', error))
+    }))
+  }
+}
+
 export function startCareerScheduler() {
-  return cron.schedule('* * * * *', () => {
-    void runScheduledSearches().catch((error) => console.error('Scheduler tick failed:', error))
-  })
+  void refreshJobSchedules().catch((error) => console.error('Could not load cron schedules:', error))
 }

@@ -14,7 +14,7 @@ export type AutomationContextValue = {
   settingsSaving: boolean
   applications: TrackedApplication[]
   metrics: { discovered: number; matched: number; applied: number; interviews: number }
-  runs: Array<{ id: number; status: string; discovered: number; matched: number; error: string | null; startedAt: string }>
+  runs: Array<{ id: number; status: string; discovered: number; matched: number; error: string | null; startedAt: string; email: string }>
   runProgress: { running: boolean; status: string; stage: string; percent: number } | null
   sourceWorkflows: Array<{ source: string; status: string; detail: string; permissionStatus: string; requestedAt: string | null }>
   lastRefreshed: Date | null
@@ -25,6 +25,7 @@ export type AutomationContextValue = {
   triggerSearchRun: () => Promise<void>
   requestPlatformIntegration: (source: string) => Promise<void>
   authorizePlatformIntegration: (source: string, payload?: { scopes?: string[]; accountIdentifier?: string; accessToken?: string }) => Promise<void>
+  updateSourceStatus: (source: string, enabled: boolean) => Promise<void>
   serverUserId: string
   userName: string
 }

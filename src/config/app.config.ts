@@ -1,7 +1,7 @@
 import type { Page } from '../types/job'
 
 export const APP_CONFIG = {
-  name: 'CareerTide',
+  name: 'SkillBridge',
   defaultSearch: {
     query: 'Java Python AWS',
     location: 'Hyderabad Secunderabad',

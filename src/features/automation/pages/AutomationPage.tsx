@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Button } from '../../../components/common/Button'
 import { AutomationOnboarding } from '../components/AutomationOnboarding'
 import { AutomationProvider } from '../context/AutomationContext'
@@ -9,6 +10,7 @@ import { AutomationDashboard } from './AutomationDashboard'
 import '../styles/automation.css'
 
 export function AutomationPage() {
+  const navigate = useNavigate()
   const [access, setAccess] = useState<'loading' | 'setup' | 'dashboard'>('loading')
 
   useEffect(() => {
@@ -43,7 +45,7 @@ export function AutomationPage() {
     void checkAuth()
   }, [])
 
-  const handleSignOut = async () => {
+  const handleSignOut = useCallback(async () => {
     const token = localStorage.getItem('candidate_token')
     if (token) {
       void setupApi.candidateLogout(token).catch(() => {})
@@ -55,7 +57,18 @@ export function AutomationPage() {
     await clearOnboardingRecord()
     window.dispatchEvent(new Event('candidate_auth_change'))
     setAccess('setup')
-  }
+  }, [])
+
+  useEffect(() => {
+    if (access !== 'dashboard') return
+    const verifySession = async () => {
+      const token = localStorage.getItem('candidate_token')
+      if (!token) return void handleSignOut()
+      try { await setupApi.candidateMe(token) } catch { await handleSignOut(); navigate('/candidate/login', { replace: true }) }
+    }
+    const interval = window.setInterval(() => { void verifySession() }, 5 * 60 * 1000)
+    return () => window.clearInterval(interval)
+  }, [access, handleSignOut, navigate])
 
   if (access === 'loading') return <div className="setup-loading full-page"><span /><p>Checking your Career Assistant access…</p></div>
   if (access === 'setup') return <AutomationOnboarding onComplete={() => setAccess('dashboard')} />

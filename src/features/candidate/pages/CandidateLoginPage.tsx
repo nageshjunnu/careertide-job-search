@@ -30,7 +30,7 @@ export function CandidateLoginPage() {
       await saveOnboardingRecord(data.onboardingRecord as unknown as OnboardingRecord)
     }
 
-    setSuccess(`Welcome back, ${data.user.fullName}! Redirecting to Career Assistant…`)
+    setSuccess(`Welcome back, ${data.user.fullName}! Redirecting to SkillBridge…`)
     window.dispatchEvent(new Event('candidate_auth_change'))
     setTimeout(() => {
       navigate('/automation')
@@ -59,7 +59,7 @@ export function CandidateLoginPage() {
     <main className="candidate-auth-shell">
       <div className="candidate-auth-card">
         <header className="candidate-auth-header">
-          <span className="brand-mark">CT</span>
+          <span className="brand-mark">SB</span>
           <h1>Candidate Portal</h1>
           <p>Access your Career Assistant, automated job searches, and 1-Click application pipeline.</p>
         </header>
