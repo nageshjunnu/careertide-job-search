@@ -88,9 +88,13 @@ export function AutomationDashboard() {
 
   const handleTriggerDiscovery = async () => {
     setRunningDiscovery(true)
+    setBillingMessage('')
     try {
       await triggerSearchRun()
       await refreshDashboard()
+      setBillingMessage('Instant AI discovery completed successfully.')
+    } catch (error) {
+      setBillingMessage(error instanceof Error ? error.message : 'Instant discovery could not start. Please check your active membership and workflow settings.')
     } finally {
       setRunningDiscovery(false)
     }
