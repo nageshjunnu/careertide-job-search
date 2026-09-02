@@ -74,6 +74,8 @@ export async function sendRecruiterApplicationEmail({
   matchScore: number
   sourceUrl: string
 }) {
+  const brandResult = await database.query<{ value: string }>(`SELECT value FROM site_settings WHERE key='brand_name'`).catch(() => ({ rows: [] as { value: string }[] }))
+  const brand = brandResult.rows[0]?.value || 'SkillBridge'
   let status = 'skipped_not_configured'
   let providerId: string | null = null
   let errorCode: string | null = null
@@ -82,7 +84,7 @@ export async function sendRecruiterApplicationEmail({
     <div style="font-family: Arial, sans-serif; color: #1e293b; max-width: 640px; margin: 0 auto; border: 1px solid #cbd5e1; border-radius: 12px; overflow: hidden;">
       <div style="background: #0f172a; padding: 24px; color: #f8fafc;">
         <h2 style="margin: 0; font-size: 20px;">Job Application: ${escapeHtml(jobTitle)}</h2>
-        <p style="margin: 4px 0 0; color: #94a3b8; font-size: 13px;">Candidate Submission via CareerTide Assistant</p>
+        <p style="margin: 4px 0 0; color: #94a3b8; font-size: 13px;">Candidate Submission via ${escapeHtml(brand)} Assistant</p>
       </div>
       <div style="padding: 24px;">
         <p style="font-size: 15px; line-height: 1.5;">Dear Hiring Manager / Talent Acquisition Team at <strong>${escapeHtml(company)}</strong>,</p>
@@ -111,7 +113,7 @@ export async function sendRecruiterApplicationEmail({
         </div>
       </div>
       <div style="background: #f8fafc; padding: 14px 24px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8; text-align: center;">
-        Submitted directly via Candidate Career Assistant · CareerTide Platform Integration
+        Submitted directly via Candidate Career Assistant · ${escapeHtml(brand)} Platform Integration
       </div>
     </div>
   `

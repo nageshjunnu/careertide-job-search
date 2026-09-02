@@ -161,6 +161,7 @@ export async function runGuidedSearch(userId: string) {
        FROM users u
        JOIN career_profiles p ON p.user_id = u.id
        JOIN career_workflows w ON w.user_id = u.id
+       JOIN candidate_billing b ON b.user_id = u.id AND b.status IN ('active','cancel_at_period_end') AND (b.period_end IS NULL OR b.period_end > NOW())
        LEFT JOIN notification_preferences n ON n.user_id = u.id
        WHERE u.id = $1 AND w.status IN ('configured', 'active')`,
       [userId]

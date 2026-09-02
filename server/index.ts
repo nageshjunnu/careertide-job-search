@@ -174,6 +174,7 @@ app.get('/api/admin/candidate-analytics', requireAdmin, async (_request: AdminRe
     response.json({ analytics: analytics.rows })
   } catch (error) { next(error) }
 })
+app.get('/api/admin/candidates/:userId/analytics-detail', requireAdmin, async (request: AdminRequest, response, next) => { try { const payments = await database.query(`SELECT payment_id,amount,mode,status,verified_at,created_at,months_covered FROM payments WHERE user_id=$1 ORDER BY created_at DESC`, [request.params.userId]); const daily = await database.query(`SELECT DATE(started_at) day,COALESCE(SUM(jobs_discovered),0) fetched,COALESCE(SUM(jobs_matched),0) matched,COALESCE(SUM((SELECT COUNT(*) FROM job_matches jm WHERE jm.run_id=career_runs.id AND jm.status='applied')),0) applied FROM career_runs WHERE user_id=$1 GROUP BY DATE(started_at) ORDER BY day DESC LIMIT 90`, [request.params.userId]); response.json({ payments: payments.rows, daily: daily.rows }) } catch (error) { next(error) } })
 app.get('/api/admin/job-run-schedules', requireAdmin, async (_request: AdminRequest, response, next) => {
   try { response.json({ schedules: (await database.query(`SELECT id,name,cron_expression,active,timezone,updated_at FROM job_run_schedules ORDER BY id ASC`)).rows }) } catch (error) { next(error) }
 })
@@ -198,7 +199,7 @@ app.get('/api/admin/settings', requireAdmin, async (_request: AdminRequest, resp
 })
 app.patch('/api/admin/settings', requireAdmin, async (request: AdminRequest, response, next) => {
   try {
-    const allowed = ['brand_name', 'logo_url', 'candidate_payments_enabled', 'monthly_membership_enabled', 'monthly_membership_amount', 'quarterly_membership_amount', 'yearly_membership_amount', 'included_jobs', 'extra_job_amount', 'first_connection_amount', 'account_change_amount', 'smtp_host', 'smtp_port', 'smtp_from']
+    const allowed = ['brand_name', 'brand_subtitle', 'logo_url', 'candidate_payments_enabled', 'monthly_membership_enabled', 'monthly_membership_amount', 'quarterly_membership_amount', 'yearly_membership_amount', 'included_jobs', 'extra_job_amount', 'first_connection_amount', 'account_change_amount', 'smtp_host', 'smtp_port', 'smtp_from']
     const entries = Object.entries(request.body as Record<string, unknown>).filter(([key, value]) => allowed.includes(key) && typeof value === 'string' && value.length <= 500)
     for (const [key, value] of entries) await database.query(`INSERT INTO site_settings (key,value,updated_at) VALUES ($1,$2,NOW()) ON CONFLICT(key) DO UPDATE SET value=$2,updated_at=NOW()`, [key, value])
     await auditAdmin(request.adminEmail!, 'updated_admin_settings', 'site_setting', 'multiple', { keys: entries.map(([key]) => key) })
@@ -784,17 +785,24 @@ app.patch('/api/career/matches/:matchId/status', async (request, response, next)
   } catch (error) { next(error) }
 })
 app.get('/api/email/status', async (_request, response) => response.json(await verifyEmailConfiguration()))
-app.get('/api/payments/status', (_request, response) => response.json({
+app.get('/api/payments/status', async (_request, response) => {
+  const settings = await database.query<{ key: string; value: string }>(`SELECT key,value FROM site_settings WHERE key IN ('monthly_membership_amount','monthly_membership_enabled')`)
+  const values = Object.fromEntries(settings.rows.map((row) => [row.key, row.value]))
+  return response.json({
   configured: Boolean(serverConfig.razorpay.keyId && serverConfig.razorpay.keySecret),
   mode: 'test',
   keyId: serverConfig.razorpay.keyId || null,
   recurring: Boolean(serverConfig.razorpay.monthlyPlanId),
-  amount: 100000,
-}))
+  amount: Number(values.monthly_membership_amount ?? 1000) * 100,
+  monthlyEnabled: values.monthly_membership_enabled !== 'false',
+  })
+})
 app.get('/api/payments/billing/:userId', async (request, response, next) => {
   try {
     const billing = await database.query(`SELECT status,period_end,advance_months,included_jobs,used_jobs FROM candidate_billing WHERE user_id=$1`, [request.params.userId])
-    response.json({ billing: billing.rows[0] ?? { status: 'inactive', period_end: null, advance_months: 0, included_jobs: 100, used_jobs: 0 }, pricing: { monthlyAmount: 1000, includedJobs: 100, extraJobAmount: 10, firstConnectionAmount: 100, accountChangeAmount: 500 } })
+    const settings = await database.query<{ key: string; value: string }>(`SELECT key,value FROM site_settings WHERE key = ANY($1)`, [['monthly_membership_amount', 'included_jobs', 'extra_job_amount', 'first_connection_amount', 'account_change_amount']])
+    const values = Object.fromEntries(settings.rows.map((row) => [row.key, Number(row.value)])) as Record<string, number>
+    response.json({ billing: billing.rows[0] ?? { status: 'inactive', period_end: null, advance_months: 0, included_jobs: values.included_jobs ?? 100, used_jobs: 0 }, pricing: { monthlyAmount: values.monthly_membership_amount ?? 1000, includedJobs: values.included_jobs ?? 100, extraJobAmount: values.extra_job_amount ?? 10, firstConnectionAmount: values.first_connection_amount ?? 100, accountChangeAmount: values.account_change_amount ?? 500 } })
   } catch (error) { next(error) }
 })
 app.post('/api/payments/billing/:userId/cancel', async (request, response, next) => {

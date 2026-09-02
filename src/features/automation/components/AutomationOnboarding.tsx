@@ -39,6 +39,7 @@ export function AutomationOnboarding({ onComplete }: { onComplete: () => void })
   const { record, loading, saving, updateData, saveProgress } = useOnboardingRecord()
   const [error, setError] = useState('')
   const [paying, setPaying] = useState(false)
+  const [membershipAmount, setMembershipAmount] = useState(1000)
   const [submitting, setSubmitting] = useState(false)
   const [activationProgress, setActivationProgress] = useState<number | null>(null)
   const [runResult, setRunResult] = useState<{ discovered: number; matched: number; applicationsSubmitted: number } | null>(null)
@@ -122,6 +123,7 @@ export function AutomationOnboarding({ onComplete }: { onComplete: () => void })
     setError('')
     try {
       const paymentStatus = await setupApi.paymentStatus()
+      setMembershipAmount(Number(paymentStatus.amount) / 100)
       if (!paymentStatus.configured) {
         window.setTimeout(() => { updateData({ paymentId: `TEST_LOCAL_${Date.now()}` }); setPaying(false) }, 800)
         return
@@ -134,8 +136,8 @@ export function AutomationOnboarding({ onComplete }: { onComplete: () => void })
           key: order.keyId,
           amount: order.amount,
           currency: order.currency,
-          name: 'CareerTide',
-          description: '₹1,000 monthly CareerTide membership · Test Mode',
+          name: 'SkillBridge',
+          description: `₹${membershipAmount.toLocaleString('en-IN')} monthly membership · Test Mode`,
           prefill: { name: data.fullName, email: data.email, contact: data.phone },
           theme: { color: '#2ed3b7' },
           handler: async (result: RazorpayResult) => {
