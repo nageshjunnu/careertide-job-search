@@ -9,7 +9,7 @@ const details: Record<string, { title: string; eyebrow: string; color: string }>
   'Search paused': { title: 'Your career search is paused', eyebrow: 'SEARCH PAUSED', color: '#f59e0b' },
   'Search resumed': { title: 'Your career search is active', eyebrow: 'SEARCH ACTIVE', color: '#14b8a6' },
   'Application submitted': { title: 'Application recorded', eyebrow: 'APPLICATION UPDATE', color: '#14b8a6' },
-  'Email test': { title: 'Your CareerTide email is working', eyebrow: 'EMAIL CONNECTED', color: '#14b8a6' },
+  'Email test': { title: 'Your email is working', eyebrow: 'EMAIL CONNECTED', color: '#14b8a6' },
 }
 
 export function createStepEmail(name: string, step: string, message: string, brand = 'SkillBridge') {

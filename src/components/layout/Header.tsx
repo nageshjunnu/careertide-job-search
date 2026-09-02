@@ -17,12 +17,16 @@ const morePages: Page[] = ['companies', 'workflows']
 export function Header({ location, onNavigate }: { location: string; onNavigate: (page: Page) => void }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [candidateName, setCandidateName] = useState<string | null>(localStorage.getItem('candidate_name'))
+  const [siteBrand, setSiteBrand] = useState('SkillBridge')
+  const [siteLogo, setSiteLogo] = useState('')
   const currentLocation = useLocation()
   const navigate = useNavigate()
   const closeMobileMenu = () => setMobileMenuOpen(false)
   const moreIsActive = morePages.some((page) => currentLocation.pathname === PAGE_PATHS[page])
 
   useEffect(() => {
+    const apiUrl = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:4000' : '')
+    void fetch(`${apiUrl}/api/site-settings`).then((response) => response.ok ? response.json() : null).then((data) => { const settings = data?.settings; const get = (key: string) => settings?.find?.((item: { key: string; value: string }) => item.key === key)?.value ?? settings?.[key]; if (get('brand_name')) setSiteBrand(get('brand_name')); if (get('logo_url')) setSiteLogo(get('logo_url')) }).catch(() => {})
     const checkAuth = () => {
       setCandidateName(localStorage.getItem('candidate_name'))
     }
@@ -61,7 +65,7 @@ export function Header({ location, onNavigate }: { location: string; onNavigate:
       </div>
     </header>
     <nav className="navbar">
-      <button className="brand" onClick={() => { closeMobileMenu(); onNavigate('home') }} type="button"><span className="brand-mark">SB</span>SkillBridge</button>
+      <button className="brand" onClick={() => { closeMobileMenu(); onNavigate('home') }} type="button">{siteLogo ? <img src={siteLogo} alt="" style={{ width: 28, height: 28, objectFit: 'contain' }} /> : <span className="brand-mark">SB</span>}{siteBrand}</button>
       <div className="nav-links">
         {pages.map((page) => <NavLink className={({ isActive }) => isActive ? 'active' : ''} end={page === 'home'} key={page} to={PAGE_PATHS[page]}>{pageLabels[page]}</NavLink>)}
         {candidateName ? (
