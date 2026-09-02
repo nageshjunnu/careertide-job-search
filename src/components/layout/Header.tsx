@@ -65,7 +65,7 @@ export function Header({ location, onNavigate }: { location: string; onNavigate:
       <div className="nav-links">
         {pages.map((page) => <NavLink className={({ isActive }) => isActive ? 'active' : ''} end={page === 'home'} key={page} to={PAGE_PATHS[page]}>{pageLabels[page]}</NavLink>)}
         {candidateName ? (
-          <NavLink to="/automation" className="nav-cta-btn">
+          <NavLink to="/candidate-dashboard" className="nav-cta-btn">
             ✦ Assistant Dashboard
           </NavLink>
         ) : (

@@ -549,6 +549,7 @@ function RoutedApp() {
   const navigate = useNavigate()
   const routeLocation = useLocation()
   const isAdminRoute = routeLocation.pathname.startsWith('/admin')
+  const isStandaloneCandidateDashboard = routeLocation.pathname === '/candidate-dashboard'
   const [waves, setWaves] = useState<WaveRipple[]>([])
   const { query, setQuery, location, setLocation, experience, setExperience } = useSearch()
   const [sourceFilter, setSourceFilter] = useState('All')
@@ -668,12 +669,13 @@ function RoutedApp() {
           />
         ))}
       </div>
-      {!isAdminRoute && <Header location={location} onNavigate={setPage} />}
+      {!isAdminRoute && !isStandaloneCandidateDashboard && <Header location={location} onNavigate={setPage} />}
 
       <Routes>
         <Route path="/" element={<HomePage {...searchProps} jobs={jobs} filteredJobs={filteredJobs} loading={loading} status={status} lastSearch={lastSearch} />} />
         <Route path="/jobs" element={<JobsPage {...searchProps} filteredJobs={filteredJobs} jobs={jobs} loading={loading} status={status} sourceFilter={sourceFilter} setSourceFilter={setSourceFilter} sourceOptions={sourceOptions} jobType={jobType} setJobType={setJobType} roleFamily={roleFamily} setRoleFamily={setRoleFamily} experienceFilter={experienceFilter} setExperienceFilter={setExperienceFilter} locationFilter={locationFilter} setLocationFilter={setLocationFilter} salaryFilter={salaryFilter} setSalaryFilter={setSalaryFilter} dateFilter={dateFilter} setDateFilter={setDateFilter} tags={tags} lastSearch={lastSearch} searchCount={searchCount} />} />
         <Route path="/automation" element={<AutomationPage />} />
+        <Route path="/candidate-dashboard" element={<AutomationPage />} />
         <Route path="/login" element={<CandidateLoginPage />} />
         <Route path="/candidate-login" element={<CandidateLoginPage />} />
         <Route path="/admin" element={<AdminPage />} />
@@ -684,7 +686,7 @@ function RoutedApp() {
         <Route path="/workflows" element={<WorkflowsPage />} />
       </Routes>
 
-      {!isAdminRoute && <Footer />}
+      {!isAdminRoute && !isStandaloneCandidateDashboard && <Footer />}
     </div>
   )
 }

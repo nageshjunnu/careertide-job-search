@@ -69,6 +69,7 @@ export function AutomationPage() {
     const interval = window.setInterval(() => { void verifySession() }, 5 * 60 * 1000)
     return () => window.clearInterval(interval)
   }, [access, handleSignOut, navigate])
+  useEffect(() => { const signOut = () => { void handleSignOut() }; window.addEventListener('candidate_signout', signOut); return () => window.removeEventListener('candidate_signout', signOut) }, [handleSignOut])
 
   if (access === 'loading') return <div className="setup-loading full-page"><span /><p>Checking your Career Assistant access…</p></div>
   if (access === 'setup') return <AutomationOnboarding onComplete={() => setAccess('dashboard')} />

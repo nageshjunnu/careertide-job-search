@@ -4,7 +4,7 @@ import { serverConfig } from './config.js'
 import { sendStepEmail, verifyEmailConfiguration, sendRecruiterApplicationEmail } from './email.js'
 import Razorpay from 'razorpay'
 import cron from 'node-cron'
-import { createCipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
+import { createCipheriv, createHash, createHmac, pbkdf2Sync, randomBytes, timingSafeEqual } from 'node:crypto'
 import { checkDatabase, database } from './database.js'
 import { setupRouter } from './routes/setup.js'
 import { runGuidedSearch } from './career-runner.js'
@@ -16,9 +16,24 @@ async function initPlatformConfigs() {
     await database.query(`CREATE TABLE IF NOT EXISTS platform_dispatch_configs (source TEXT PRIMARY KEY, mode TEXT NOT NULL DEFAULT 'recruiter_email', auto_dispatch BOOLEAN NOT NULL DEFAULT TRUE, updated_at TIMESTAMPTZ DEFAULT NOW())`)
     await database.query(`ALTER TABLE platform_dispatch_configs ADD COLUMN IF NOT EXISTS api_key TEXT`)
     await database.query(`ALTER TABLE platform_dispatch_configs ADD COLUMN IF NOT EXISTS api_secret TEXT`)
+    await database.query(`ALTER TABLE platform_dispatch_configs ADD COLUMN IF NOT EXISTS oauth_authorize_url TEXT`)
+    await database.query(`ALTER TABLE platform_dispatch_configs ADD COLUMN IF NOT EXISTS oauth_token_url TEXT`)
+    await database.query(`ALTER TABLE platform_dispatch_configs ADD COLUMN IF NOT EXISTS redirect_uri TEXT`)
+    await database.query(`ALTER TABLE platform_dispatch_configs ADD COLUMN IF NOT EXISTS scopes TEXT`)
     for (const source of DEFAULT_PLATFORMS) {
       const mode = ['Remotive', 'Arbeitnow', 'Jobicy'].includes(source) ? 'api' : 'recruiter_email'
       await database.query(`INSERT INTO platform_dispatch_configs (source, mode, auto_dispatch, updated_at) VALUES ($1, $2, TRUE, NOW()) ON CONFLICT(source) DO NOTHING`, [source, mode])
+    }
+    const envIntegrations: Record<string, { key: string; secret: string; authorize: string; token: string; redirect: string; scopes: string }> = {
+      LinkedIn: { key: process.env.LINKEDIN_OAUTH_CLIENT_ID ?? '', secret: process.env.LINKEDIN_OAUTH_CLIENT_SECRET ?? '', authorize: process.env.LINKEDIN_OAUTH_AUTHORIZE_URL ?? '', token: process.env.LINKEDIN_OAUTH_TOKEN_URL ?? '', redirect: process.env.LINKEDIN_OAUTH_REDIRECT_URI ?? '', scopes: process.env.LINKEDIN_OAUTH_SCOPES ?? '' },
+      Naukri: { key: serverConfig.integrations.naukri.clientId, secret: serverConfig.integrations.naukri.clientSecret, authorize: serverConfig.integrations.naukri.authorizeUrl, token: serverConfig.integrations.naukri.tokenUrl, redirect: serverConfig.integrations.naukri.redirectUri, scopes: serverConfig.integrations.naukri.scopes },
+      Foundit: { key: process.env.FOUNDIT_PARTNER_CLIENT_ID ?? '', secret: process.env.FOUNDIT_PARTNER_CLIENT_SECRET ?? '', authorize: '', token: '', redirect: '', scopes: '' },
+      Monster: { key: process.env.MONSTER_PARTNER_CLIENT_ID ?? '', secret: process.env.MONSTER_PARTNER_CLIENT_SECRET ?? '', authorize: '', token: '', redirect: '', scopes: '' },
+      Shine: { key: process.env.SHINE_PARTNER_CLIENT_ID ?? '', secret: process.env.SHINE_PARTNER_CLIENT_SECRET ?? '', authorize: '', token: '', redirect: '', scopes: '' },
+    }
+    for (const [source, values] of Object.entries(envIntegrations)) {
+      if (!Object.values(values).some(Boolean)) continue
+      await database.query(`UPDATE platform_dispatch_configs SET api_key=COALESCE(NULLIF($2,''),api_key),api_secret=COALESCE(NULLIF($3,''),api_secret),oauth_authorize_url=COALESCE(NULLIF($4,''),oauth_authorize_url),oauth_token_url=COALESCE(NULLIF($5,''),oauth_token_url),redirect_uri=COALESCE(NULLIF($6,''),redirect_uri),scopes=COALESCE(NULLIF($7,''),scopes),updated_at=NOW() WHERE source=$1`, [source, values.key, values.secret, values.authorize, values.token, values.redirect, values.scopes])
     }
   } catch (error) {
     console.error('Error initializing platform dispatch configs:', error)
@@ -33,6 +48,9 @@ async function initPaymentGateways() {
     await database.query(`ALTER TABLE payment_gateways ADD COLUMN IF NOT EXISTS is_default BOOLEAN NOT NULL DEFAULT FALSE`)
     for (const name of DEFAULT_PAYMENT_GATEWAYS) {
       await database.query(`INSERT INTO payment_gateways (name, enabled, is_default, mode, config, updated_at) VALUES ($1, $2, $2, 'test', '{}'::jsonb, NOW()) ON CONFLICT(name) DO NOTHING`, [name, name === 'razorpay'])
+    }
+    if (serverConfig.razorpay.keyId || serverConfig.razorpay.keySecret) {
+      await database.query(`UPDATE payment_gateways SET enabled=TRUE,is_default=TRUE,config=config || $1::jsonb,updated_at=NOW() WHERE name='razorpay'`, [JSON.stringify({ apiKey: serverConfig.razorpay.keyId, apiSecret: serverConfig.razorpay.keySecret })])
     }
   } catch (error) {
     console.error('Error initializing payment gateways:', error)
@@ -64,6 +82,8 @@ app.use(express.json({ limit: '1mb' }))
 
 type AdminRequest = express.Request & { adminEmail?: string }
 const hashToken = (token: string) => createHash('sha256').update(token).digest('hex')
+const hashAdminPassword = (password: string, salt = randomBytes(16).toString('hex')) => `${salt}:${pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex')}`
+const verifyAdminPassword = (password: string, stored: string) => { const [salt, hash] = stored.split(':'); return Boolean(salt && hash) && timingSafeEqual(Buffer.from(hash), Buffer.from(pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex'))) }
 const encryptIntegrationToken = (token: string) => {
   const key = Buffer.from(serverConfig.integrations.tokenEncryptionKey, 'base64')
   if (key.length !== 32) throw new Error('INTEGRATION_TOKEN_ENCRYPTION_KEY must be a base64-encoded 32-byte key.')
@@ -80,10 +100,10 @@ const requireAdmin = async (request: AdminRequest, response: express.Response, n
   try {
     const token = request.headers.authorization?.replace(/^Bearer\s+/i, '')
     if (!token) return response.status(401).json({ message: 'Admin sign-in is required.' })
-    const session = await database.query<{ admin_email: string }>('SELECT admin_email FROM admin_sessions WHERE token_hash=$1 AND expires_at>NOW()', [hashToken(token)])
+    const session = await database.query<{ admin_email: string }>(`SELECT admin_email FROM admin_sessions WHERE token_hash=$1 AND expires_at>NOW() AND last_seen_at>NOW()-INTERVAL '1 hour'`, [hashToken(token)])
     if (!session.rows[0]) return response.status(401).json({ message: 'Your admin session has expired. Sign in again.' })
     request.adminEmail = session.rows[0].admin_email
-    void database.query('UPDATE admin_sessions SET last_seen_at=NOW() WHERE token_hash=$1', [hashToken(token)])
+    void database.query(`UPDATE admin_sessions SET last_seen_at=NOW(), expires_at=NOW()+INTERVAL '1 hour' WHERE token_hash=$1`, [hashToken(token)])
     next()
   } catch (error) { next(error) }
 }
@@ -92,9 +112,11 @@ app.post('/api/admin/login', async (request, response, next) => {
   try {
     const { email, password } = request.body as { email?: string; password?: string }
     if (!serverConfig.admin.email || !serverConfig.admin.password) return response.status(503).json({ message: 'Admin credentials are not configured. Add ADMIN_EMAIL and ADMIN_PASSWORD to the server environment.' })
+    const override = await database.query<{ value: string }>(`SELECT value FROM site_settings WHERE key='admin_password_hash'`)
+    const passwordOverride = override.rows[0]?.value
     const expected = Buffer.from(serverConfig.admin.password)
     const supplied = Buffer.from(password ?? '')
-    const passwordMatches = expected.length === supplied.length && timingSafeEqual(expected, supplied)
+    const passwordMatches = passwordOverride ? verifyAdminPassword(password ?? '', passwordOverride) : expected.length === supplied.length && timingSafeEqual(expected, supplied)
     if (email?.trim().toLowerCase() !== serverConfig.admin.email || !passwordMatches) return response.status(401).json({ message: 'Invalid admin email or password.' })
     const token = randomBytes(32).toString('hex')
     await database.query(`INSERT INTO admin_sessions (token_hash,admin_email,expires_at) VALUES ($1,$2,NOW()+INTERVAL '7 days')`, [hashToken(token), serverConfig.admin.email])
@@ -180,6 +202,18 @@ app.patch('/api/admin/settings', requireAdmin, async (request: AdminRequest, res
     const entries = Object.entries(request.body as Record<string, unknown>).filter(([key, value]) => allowed.includes(key) && typeof value === 'string' && value.length <= 500)
     for (const [key, value] of entries) await database.query(`INSERT INTO site_settings (key,value,updated_at) VALUES ($1,$2,NOW()) ON CONFLICT(key) DO UPDATE SET value=$2,updated_at=NOW()`, [key, value])
     await auditAdmin(request.adminEmail!, 'updated_admin_settings', 'site_setting', 'multiple', { keys: entries.map(([key]) => key) })
+    response.json({ updated: true })
+  } catch (error) { next(error) }
+})
+app.patch('/api/admin/password', requireAdmin, async (request: AdminRequest, response, next) => {
+  try {
+    const { currentPassword, newPassword } = request.body as { currentPassword?: string; newPassword?: string }
+    if (!currentPassword || !newPassword || newPassword.length < 8 || !/(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z\d])/.test(newPassword)) return response.status(400).json({ message: 'Use a new password with 8+ characters, uppercase, lowercase, number, and special character.' })
+    const override = await database.query<{ value: string }>(`SELECT value FROM site_settings WHERE key='admin_password_hash'`)
+    const valid = override.rows[0]?.value ? verifyAdminPassword(currentPassword, override.rows[0].value) : serverConfig.admin.password === currentPassword
+    if (!valid) return response.status(401).json({ message: 'Current admin password is incorrect.' })
+    await database.query(`INSERT INTO site_settings (key,value,updated_at) VALUES ('admin_password_hash',$1,NOW()) ON CONFLICT(key) DO UPDATE SET value=$1,updated_at=NOW()`, [hashAdminPassword(newPassword)])
+    await auditAdmin(request.adminEmail!, 'admin_password_changed', 'admin', request.adminEmail)
     response.json({ updated: true })
   } catch (error) { next(error) }
 })
@@ -280,6 +314,16 @@ app.patch('/api/admin/users/:userId/rules', requireAdmin, async (request: AdminR
     } catch (error) { await client.query('ROLLBACK'); throw error } finally { client.release() }
   } catch (error) { next(error) }
 })
+app.patch('/api/admin/users/:userId/email', requireAdmin, async (request: AdminRequest, response, next) => {
+  try {
+    const email = String(request.body.email ?? '').trim().toLowerCase()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return response.status(400).json({ message: 'Enter a valid candidate email address.' })
+    const updated = await database.query(`UPDATE users SET email=$2,updated_at=NOW() WHERE id=$1 RETURNING id,email`, [request.params.userId, email])
+    if (!updated.rows[0]) return response.status(404).json({ message: 'Candidate not found.' })
+    await auditAdmin(request.adminEmail!, 'candidate_email_updated', 'user', request.params.userId, { email })
+    response.json({ updated: true, email })
+  } catch (error: any) { if (error?.code === '23505') return response.status(409).json({ message: 'That email is already used by another candidate.' }); next(error) }
+})
 app.delete('/api/admin/users/:userId', requireAdmin, async (request: AdminRequest, response, next) => {
   try {
     const target = await database.query<{ email: string }>('SELECT email FROM users WHERE id=$1', [request.params.userId])
@@ -292,7 +336,7 @@ app.delete('/api/admin/users/:userId', requireAdmin, async (request: AdminReques
 
 app.get('/api/admin/platform-configs', requireAdmin, async (_request: AdminRequest, response, next) => {
   try {
-    const configs = await database.query(`SELECT source, mode, auto_dispatch, api_key, api_secret, updated_at FROM platform_dispatch_configs ORDER BY source ASC`)
+    const configs = await database.query(`SELECT source, mode, auto_dispatch, api_key, api_secret, oauth_authorize_url, oauth_token_url, redirect_uri, scopes, updated_at FROM platform_dispatch_configs ORDER BY source ASC`)
     response.json({ configs: configs.rows })
   } catch (error) { next(error) }
 })
@@ -300,23 +344,27 @@ app.get('/api/admin/platform-configs', requireAdmin, async (_request: AdminReque
 app.patch('/api/admin/platform-configs/:source', requireAdmin, async (request: AdminRequest, response, next) => {
   try {
     const { source } = request.params
-    const { mode, autoDispatch, api_key, api_secret } = request.body as { mode?: string, autoDispatch?: boolean, api_key?: string, api_secret?: string }
+    const { mode, autoDispatch, api_key, api_secret, oauth_authorize_url, oauth_token_url, redirect_uri, scopes } = request.body as { mode?: string, autoDispatch?: boolean, api_key?: string, api_secret?: string, oauth_authorize_url?: string, oauth_token_url?: string, redirect_uri?: string, scopes?: string }
 
     if (mode && !['api', 'recruiter_email'].includes(mode)) {
       return response.status(400).json({ message: 'Mode must be api or recruiter_email.' })
     }
 
     const updated = await database.query(
-      `INSERT INTO platform_dispatch_configs (source, mode, auto_dispatch, api_key, api_secret, updated_at)
-       VALUES ($1, COALESCE($2, 'recruiter_email'), COALESCE($3, true), $4, $5, NOW())
+      `INSERT INTO platform_dispatch_configs (source, mode, auto_dispatch, api_key, api_secret, oauth_authorize_url, oauth_token_url, redirect_uri, scopes, updated_at)
+       VALUES ($1, COALESCE($2, 'recruiter_email'), COALESCE($3, true), $4, $5, $6, $7, $8, $9, NOW())
        ON CONFLICT(source) DO UPDATE SET
          mode = COALESCE($2, platform_dispatch_configs.mode),
          auto_dispatch = COALESCE($3, platform_dispatch_configs.auto_dispatch),
          api_key = COALESCE($4, platform_dispatch_configs.api_key),
          api_secret = COALESCE($5, platform_dispatch_configs.api_secret),
+         oauth_authorize_url = COALESCE($6, platform_dispatch_configs.oauth_authorize_url),
+         oauth_token_url = COALESCE($7, platform_dispatch_configs.oauth_token_url),
+         redirect_uri = COALESCE($8, platform_dispatch_configs.redirect_uri),
+         scopes = COALESCE($9, platform_dispatch_configs.scopes),
          updated_at = NOW()
-       RETURNING source, mode, auto_dispatch, api_key, api_secret, updated_at`,
-      [source, mode || null, autoDispatch !== undefined ? autoDispatch : null, api_key || null, api_secret || null]
+       RETURNING source, mode, auto_dispatch, api_key, api_secret, oauth_authorize_url, oauth_token_url, redirect_uri, scopes, updated_at`,
+      [source, mode || null, autoDispatch !== undefined ? autoDispatch : null, api_key || null, api_secret || null, oauth_authorize_url || null, oauth_token_url || null, redirect_uri || null, scopes || null]
     )
 
     await auditAdmin(request.adminEmail!, `updated_platform_config_${source}`, 'platform', source)
@@ -834,9 +882,15 @@ app.post('/api/payments/order', async (request, response, next) => {
   } catch (error) { next(error) }
 })
 app.post('/api/payments/verify', async (request, response) => {
-  const { razorpay_order_id: orderId, razorpay_subscription_id: subscriptionId, razorpay_payment_id: paymentId, razorpay_signature: signature, userId, amount = 100000 } = request.body
-  if (!paymentId || !signature || !serverConfig.razorpay.keySecret) {
-    return response.status(400).json({ verified: false, message: 'Payment verification data is incomplete.' })
+  const body = request.body as Record<string, unknown>
+  const orderId = String(body.razorpay_order_id ?? body.orderId ?? '') || null
+  const subscriptionId = String(body.razorpay_subscription_id ?? body.subscriptionId ?? '') || null
+  const paymentId = String(body.razorpay_payment_id ?? body.paymentId ?? '') || null
+  const signature = String(body.razorpay_signature ?? body.signature ?? '') || null
+  const userId = typeof body.userId === 'string' ? body.userId : undefined
+  const amount = Number(body.amount ?? 100000)
+  if (!paymentId || !serverConfig.razorpay.keySecret) {
+    return response.status(400).json({ verified: false, message: !serverConfig.razorpay.keySecret ? 'Payment verification is unavailable because Razorpay secret is not configured on the server.' : 'Razorpay did not return a payment ID.' })
   }
 
   let expected: string
@@ -848,7 +902,16 @@ app.post('/api/payments/verify', async (request, response) => {
     return response.status(400).json({ verified: false, message: 'Missing order_id or subscription_id' })
   }
 
-  const verified = expected.length === signature.length && timingSafeEqual(Buffer.from(expected), Buffer.from(signature))
+  let verified = Boolean(signature && expected.length === signature.length && timingSafeEqual(Buffer.from(expected), Buffer.from(signature)))
+  // Some subscription callbacks omit the signature in embedded/redirect flows.
+  // Confirm the payment server-to-server before accepting that callback.
+  if (!verified && !signature) {
+    try {
+      const razorpay = new Razorpay({ key_id: serverConfig.razorpay.keyId, key_secret: serverConfig.razorpay.keySecret })
+      const payment = await razorpay.payments.fetch(paymentId)
+      verified = payment.status === 'captured' || payment.status === 'authorized'
+    } catch { verified = false }
+  }
   if (verified && userId) {
     const months = Math.max(1, Math.floor(Number(amount) / 100000))
     await database.query(`INSERT INTO payments (user_id,payment_id,amount,mode,status,verified_at) VALUES ($1,$2,$3,'test','verified',NOW()) ON CONFLICT(payment_id) DO NOTHING`, [userId, paymentId, Math.round(Number(amount) / 100)])

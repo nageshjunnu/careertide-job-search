@@ -7,7 +7,7 @@ const transporter = serverConfig.smtp.host
   ? nodemailer.createTransport({ host: serverConfig.smtp.host, port: serverConfig.smtp.port, secure: serverConfig.smtp.secure, auth: { user: serverConfig.smtp.user, pass: serverConfig.smtp.pass } })
   : null
 
-export async function sendStepEmail(userId: string, email: string, name: string, step: string, message: string) {
+export async function sendStepEmail(userId: string | null, email: string, name: string, step: string, message: string) {
   let status = 'skipped_not_configured'
   let providerId: string | null = null
   let errorCode: string | null = null
@@ -154,7 +154,8 @@ export async function sendRecruiterApplicationEmail({
           <strong>Match Score:</strong> ${matchScore}%<br>
           <strong>Dispatched At:</strong> ${new Date().toLocaleString('en-IN')}<br>
         `
-        void sendStepEmail('admin-audit-id', adminEmail, 'CareerTide Administrator', `[Admin Audit] Application Dispatched: ${candidateName} -> ${company}`, adminMsg)
+        // Admin audit notifications do not belong to a candidate row; keep the FK nullable.
+        void sendStepEmail(null, adminEmail, 'CareerTide Administrator', `[Admin Audit] Application Dispatched: ${candidateName} -> ${company}`, adminMsg)
       }
     }
   } catch (err: unknown) {

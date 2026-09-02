@@ -7,5 +7,5 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 }
 
 export function Button({ children, className = '', variant = 'primary', type = 'button', ...props }: ButtonProps) {
-  return <button className={`${styles.button} ${styles[variant]} ${className}`.trim()} type={type} {...props}>{children}</button>
+  return <button className={`${styles.button} ${styles[variant]} ${className}`.trim()} type={type} {...props}>{props.disabled && <i className={styles.loader} aria-hidden="true" />}{children}</button>
 }

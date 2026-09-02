@@ -8,6 +8,7 @@ import '../../automation/styles/automation.css'
 
 export function CandidateLoginPage() {
   const navigate = useNavigate()
+  const existingToken = Boolean(localStorage.getItem('candidate_token'))
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -33,7 +34,7 @@ export function CandidateLoginPage() {
     setSuccess(`Welcome back, ${data.user.fullName}! Redirecting to SkillBridge…`)
     window.dispatchEvent(new Event('candidate_auth_change'))
     setTimeout(() => {
-      navigate('/automation')
+      navigate('/candidate-dashboard')
     }, 600)
   }
 
@@ -96,6 +97,7 @@ export function CandidateLoginPage() {
         </form>
 
         <footer className="candidate-auth-footer">
+          {existingToken && <button className="candidate-dashboard-link" onClick={() => navigate('/candidate-dashboard')} type="button">Go to Candidate Dashboard →</button>}
           <Link to="/">← Back to Job Search</Link>
           <span>•</span>
           <Link to="/admin">Recruiter / Admin Login →</Link>

@@ -112,6 +112,9 @@ export function PlatformAuthModal({ source, userId, onClose, onSuccess }: Platfo
     setLoading(true)
     setError('')
     try {
+      // Record the candidate's explicit permission request before attempting
+      // provider authorization. Admin/provider approval can then be tracked.
+      await setupApi.requestPlatformIntegration(userId, source)
       await setupApi.authorizePlatformIntegration(userId, source, {
         scopes: selectedScopes,
         accountIdentifier: accountEmail.trim() || `${source} Authorized Profile`,

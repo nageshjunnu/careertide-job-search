@@ -79,6 +79,27 @@ export function AdminPage() {
     return () => window.clearTimeout(loadTimer)
   }, [load, token])
 
+  // Validate the admin JWT/session periodically so idle administrators are
+  // returned to the login screen without needing a page refresh.
+  useEffect(() => {
+    if (!token) return
+    const validate = async () => {
+      try {
+        await adminApi.overview(token)
+      } catch (requestError) {
+        const message = requestError instanceof Error ? requestError.message : ''
+        if (/session|sign-in|401|expired/i.test(message)) {
+          sessionStorage.removeItem(SESSION_KEY)
+          setToken('')
+          setOverview(null)
+          setError('Your admin session expired after inactivity. Please sign in again.')
+        }
+      }
+    }
+    const interval = window.setInterval(() => { void validate() }, 5 * 60 * 1000)
+    return () => window.clearInterval(interval)
+  }, [token])
+
   const login = async (event: React.FormEvent) => {
     event.preventDefault()
     setLoading(true)
@@ -116,6 +137,7 @@ export function AdminPage() {
     setSelectedUser(null)
     await load()
   }
+  const saveCandidateEmail = async (user: AdminUser, email: string) => { await adminApi.updateCandidateEmail(token, user.id, email); await load() }
 
   const deleteUser = async (user: AdminUser) => {
     if (!window.confirm(`Delete ${user.full_name} and all of their CareerTide data? This cannot be undone.`)) return
@@ -131,8 +153,8 @@ export function AdminPage() {
   }
   const togglePlatformEnabled = async (source: string, enabled: boolean) => { await adminApi.updatePlatformConfig(token, source, { autoDispatch: enabled }); await load() }
 
-  const updatePlatformKeys = async (source: string, api_key: string, api_secret: string) => {
-    await adminApi.updatePlatformConfig(token, source, { api_key, api_secret })
+  const updatePlatformKeys = async (source: string, api_key: string, api_secret: string, integration: { oauth_authorize_url?: string; oauth_token_url?: string; redirect_uri?: string; scopes?: string } = {}) => {
+    await adminApi.updatePlatformConfig(token, source, { api_key, api_secret, ...integration })
     await load()
   }
 
@@ -257,7 +279,7 @@ export function AdminPage() {
       </nav>
 
       {selectedUser && (
-        <CandidateManager user={selectedUser} onClose={() => setSelectedUser(null)} onSave={saveRules} onDelete={deleteUser} />
+        <CandidateManager user={selectedUser} onClose={() => setSelectedUser(null)} onSave={saveRules} onSaveEmail={saveCandidateEmail} onDelete={deleteUser} />
       )}
       {selectedAnalytics && <CandidateAnalyticsModal analytics={selectedAnalytics} onClose={() => setSelectedAnalytics(null)} />}
     </main>
@@ -305,7 +327,7 @@ function AdminContent({
   onViewAnalytics: (analytics: CandidateAnalytics) => void
   onTogglePlatform: (source: string, currentMode: 'api' | 'recruiter_email') => Promise<void>
   onTogglePlatformEnabled: (source: string, enabled: boolean) => Promise<void>
-  onUpdateKeys: (source: string, apiKey: string, apiSecret: string) => Promise<void>
+  onUpdateKeys: (source: string, apiKey: string, apiSecret: string, integration?: { oauth_authorize_url?: string; oauth_token_url?: string; redirect_uri?: string; scopes?: string }) => Promise<void>
   onUpdatePaymentGateway: (name: string, payload: { enabled?: boolean; isDefault?: boolean; mode?: 'test' | 'live'; apiKey?: string; apiSecret?: string; webhookUrl?: string; webhookSecret?: string }) => Promise<void>
   onUpdateSchedule: (id: number, payload: { cronExpression?: string; active?: boolean; timezone?: string }) => Promise<void>
 }) {
@@ -418,11 +440,9 @@ function PlatformConfigManager({
   configs: PlatformConfig[]
   onToggle: (source: string, currentMode: 'api' | 'recruiter_email') => Promise<void>
   onToggleEnabled: (source: string, enabled: boolean) => Promise<void>
-  onUpdateKeys: (source: string, apiKey: string, apiSecret: string) => Promise<void>
+  onUpdateKeys: (source: string, apiKey: string, apiSecret: string, integration?: { oauth_authorize_url?: string; oauth_token_url?: string; redirect_uri?: string; scopes?: string }) => Promise<void>
 }) {
-  const platforms = configs.length
-    ? configs
-    : [
+  const defaultPlatforms = [
         { source: 'Naukri', mode: 'recruiter_email', auto_dispatch: true, updated_at: '' },
         { source: 'LinkedIn', mode: 'recruiter_email', auto_dispatch: true, updated_at: '' },
         { source: 'Foundit', mode: 'recruiter_email', auto_dispatch: true, updated_at: '' },
@@ -432,6 +452,8 @@ function PlatformConfigManager({
         { source: 'Arbeitnow', mode: 'api', auto_dispatch: true, updated_at: '' },
         { source: 'Jobicy', mode: 'api', auto_dispatch: true, updated_at: '' },
       ] as PlatformConfig[]
+  const platforms = defaultPlatforms.map(fallback => configs.find(item => item.source.toLowerCase() === fallback.source.toLowerCase()) ?? fallback)
+  configs.forEach(item => { if (!platforms.some(platform => platform.source.toLowerCase() === item.source.toLowerCase())) platforms.push(item) })
 
   return (
     <div className="admin-platform-grid">
@@ -442,10 +464,15 @@ function PlatformConfigManager({
   )
 }
 
-function PlatformConfigCard({ config, onToggle, onToggleEnabled, onUpdateKeys }: { config: PlatformConfig, onToggle: (source: string, currentMode: 'api' | 'recruiter_email') => Promise<void>, onToggleEnabled: (source: string, enabled: boolean) => Promise<void>, onUpdateKeys: (source: string, apiKey: string, apiSecret: string) => Promise<void> }) {
+function PlatformConfigCard({ config, onToggle, onToggleEnabled, onUpdateKeys }: { config: PlatformConfig, onToggle: (source: string, currentMode: 'api' | 'recruiter_email') => Promise<void>, onToggleEnabled: (source: string, enabled: boolean) => Promise<void>, onUpdateKeys: (source: string, apiKey: string, apiSecret: string, integration?: { oauth_authorize_url?: string; oauth_token_url?: string; redirect_uri?: string; scopes?: string }) => Promise<void> }) {
   const [isBusy, setIsBusy] = useState(false)
+  const [showIntegration, setShowIntegration] = useState(false)
   const [apiKey, setApiKey] = useState(config.api_key || '')
   const [apiSecret, setApiSecret] = useState(config.api_secret || '')
+  const [authorizeUrl, setAuthorizeUrl] = useState(config.oauth_authorize_url || '')
+  const [tokenUrl, setTokenUrl] = useState(config.oauth_token_url || '')
+  const [redirectUri, setRedirectUri] = useState(config.redirect_uri || '')
+  const [scopes, setScopes] = useState(config.scopes || '')
   const isApi = config.mode === 'api'
 
   const handleToggle = async () => {
@@ -460,7 +487,7 @@ function PlatformConfigCard({ config, onToggle, onToggleEnabled, onUpdateKeys }:
   const handleSaveKeys = async () => {
     setIsBusy(true)
     try {
-      await onUpdateKeys(config.source, apiKey, apiSecret)
+      await onUpdateKeys(config.source, apiKey, apiSecret, { oauth_authorize_url: authorizeUrl, oauth_token_url: tokenUrl, redirect_uri: redirectUri, scopes })
     } finally {
       setIsBusy(false)
     }
@@ -483,6 +510,7 @@ function PlatformConfigCard({ config, onToggle, onToggleEnabled, onUpdateKeys }:
           {isBusy ? 'Switching…' : isApi ? 'Switch to Email Dispatch' : 'Enable API Integration'}
         </button>
         <button className="toggle-mode-btn" disabled={isBusy} onClick={() => void onToggleEnabled(config.source, !config.auto_dispatch)}>{config.auto_dispatch ? 'Disable for candidates' : 'Enable for candidates'}</button>
+        <button className="toggle-mode-btn" type="button" onClick={() => setShowIntegration(true)}>View integration</button>
       </div>
       <p className="platform-card-desc">
         {isApi ? (
@@ -507,6 +535,10 @@ function PlatformConfigCard({ config, onToggle, onToggleEnabled, onUpdateKeys }:
               API Key (Client ID)
               <input type="text" value={apiKey} onChange={e => setApiKey(e.target.value)} style={{ width: '100%', marginTop: '4px', padding: '6px', border: '1px solid #d1d5db', borderRadius: '4px', background: '#fff', color: '#000' }} placeholder="Enter API Key" />
             </label>
+            <label style={{ fontSize: '12px', fontWeight: 'bold' }}>OAuth authorize URL<input type="text" value={authorizeUrl} onChange={e => setAuthorizeUrl(e.target.value)} placeholder="https://provider/authorize" style={{ width: '100%', marginTop: '4px', padding: '6px' }} /></label>
+            <label style={{ fontSize: '12px', fontWeight: 'bold' }}>OAuth token URL<input type="text" value={tokenUrl} onChange={e => setTokenUrl(e.target.value)} placeholder="https://provider/token" style={{ width: '100%', marginTop: '4px', padding: '6px' }} /></label>
+            <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Redirect URI<input type="text" value={redirectUri} onChange={e => setRedirectUri(e.target.value)} placeholder="https://your-app/callback" style={{ width: '100%', marginTop: '4px', padding: '6px' }} /></label>
+            <label style={{ fontSize: '12px', fontWeight: 'bold' }}>OAuth scopes<input type="text" value={scopes} onChange={e => setScopes(e.target.value)} placeholder="jobs.read jobs.apply" style={{ width: '100%', marginTop: '4px', padding: '6px' }} /></label>
             <label style={{ fontSize: '12px', fontWeight: 'bold' }}>
               API Secret (Client Secret)
               <input type="password" value={apiSecret} onChange={e => setApiSecret(e.target.value)} style={{ width: '100%', marginTop: '4px', padding: '6px', border: '1px solid #d1d5db', borderRadius: '4px', background: '#fff', color: '#000' }} placeholder="Enter API Secret" />
@@ -517,8 +549,21 @@ function PlatformConfigCard({ config, onToggle, onToggleEnabled, onUpdateKeys }:
           </div>
         </div>
       )}
+      {showIntegration && <IntegrationInfoModal source={config.source} onClose={() => setShowIntegration(false)} />}
     </div>
   )
+}
+
+function IntegrationInfoModal({ source, onClose }: { source: string; onClose: () => void }) {
+  const links: Record<string, string> = {
+    LinkedIn: 'https://www.linkedin.com/developers/apps',
+    Monster: 'https://developer.nxtdev.monster.io/',
+    Naukri: 'https://enterprise.naukri.com/recruit/login',
+    Foundit: 'https://recruiter.foundit.in/',
+    Shine: 'https://www.shine.com/',
+  }
+  const restricted = ['Naukri', 'LinkedIn', 'Foundit', 'Monster', 'Shine'].includes(source)
+  return <div className="admin-modal-backdrop" role="dialog" aria-modal="true"><div className="admin-modal" style={{ maxWidth: 560 }}><div className="admin-modal-header"><h3>{source} integration setup</h3><button type="button" onClick={onClose}>×</button></div><div className="admin-modal-body"><ol><li>Create or request an approved developer/partner application with {source}.</li><li>Register this callback URL: <code>{window.location.origin}/api/integrations/{source.toLowerCase()}/callback</code></li><li>Copy the client/partner ID and secret into the fields on this card.</li><li>Enter the provider OAuth URLs and only the scopes they approve, then save.</li><li>Enable API Integration and Enable for candidates after testing.</li></ol>{restricted && <p><strong>Approval required:</strong> job search and automatic application scopes are not public for this source. Candidate authorization is also required.</p>} {links[source] && <a href={links[source]} target="_blank" rel="noreferrer">Open official {source} developer/partner page ↗</a>}</div><div className="admin-modal-actions"><button type="button" onClick={onClose}>Close</button></div></div></div>
 }
 
 function PaymentGatewayManager({ gateways, onUpdate }: { gateways: PaymentGateway[]; onUpdate: (name: string, payload: { enabled?: boolean; isDefault?: boolean; mode?: 'test' | 'live'; apiKey?: string; apiSecret?: string; webhookUrl?: string; webhookSecret?: string }) => Promise<void> }) {
@@ -538,7 +583,14 @@ function AdminSettingsForm({ token }: { token: string }) {
     <section><h3>Pricing controls</h3><p>Membership availability, plan amounts, included jobs, and source charges are managed from the Payments page.</p></section>
     <section><h3>Email delivery</h3>{field('smtp_host', 'SMTP host')}{field('smtp_port', 'SMTP port', 'number')}{field('smtp_from', 'From email address')}<small>SMTP passwords and payment secrets remain secured in environment variables.</small></section>
     <section><h3>Admin profile</h3><p>Admin login email and password are managed through server environment variables.</p><button className="admin-save" disabled={saving} onClick={() => void save()}>{saving ? 'Saving…' : 'Save all settings'}</button>{message && <small>{message}</small>}</section>
+    <AdminPasswordForm token={token} />
   </div>
+}
+
+function AdminPasswordForm({ token }: { token: string }) {
+  const [current, setCurrent] = useState(''); const [next, setNext] = useState(''); const [message, setMessage] = useState(''); const [busy, setBusy] = useState(false)
+  const save = async () => { setBusy(true); setMessage(''); try { await adminApi.updatePassword(token, current, next); setCurrent(''); setNext(''); setMessage('Admin password changed successfully.') } catch (error) { setMessage(error instanceof Error ? error.message : 'Could not change password.') } finally { setBusy(false) } }
+  return <section><h3>Change admin password</h3><label>Current password<input type="password" value={current} onChange={(event) => setCurrent(event.target.value)} /></label><label>New password<input type="password" value={next} onChange={(event) => setNext(event.target.value)} placeholder="8+ chars, upper/lower/number/symbol" /></label><button className="admin-save" disabled={busy} onClick={() => void save()}>{busy ? 'Changing…' : 'Change password'}</button>{message && <small>{message}</small>}</section>
 }
 
 function MembershipControls({ token }: { token: string }) {
@@ -792,7 +844,7 @@ function TrendSignals({ trends }: { trends: AdminOverview['trends'] }) {
   )
 }
 
-function CandidateManager({ user, onClose, onSave, onDelete }: { user: AdminUser; onClose: () => void; onSave: (user: AdminUser, rules: { schedule: string; timezone: string; dailyLimit: number; minimumScore: number; locations: string }) => Promise<void>; onDelete: (user: AdminUser) => Promise<void> }) {
+function CandidateManager({ user, onClose, onSave, onSaveEmail, onDelete }: { user: AdminUser; onClose: () => void; onSave: (user: AdminUser, rules: { schedule: string; timezone: string; dailyLimit: number; minimumScore: number; locations: string }) => Promise<void>; onSaveEmail: (user: AdminUser, email: string) => Promise<void>; onDelete: (user: AdminUser) => Promise<void> }) {
   const [schedule, setSchedule] = useState(user.schedule ?? '09:00')
   const [timezone, setTimezone] = useState(user.timezone ?? 'Asia/Kolkata')
   const [dailyLimit, setDailyLimit] = useState(user.daily_limit ?? 10)
@@ -800,6 +852,7 @@ function CandidateManager({ user, onClose, onSave, onDelete }: { user: AdminUser
   const [locations, setLocations] = useState(user.locations ?? '')
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
+  const [email, setEmail] = useState(user.email)
 
   const save = async () => {
     setSaving(true)
@@ -836,6 +889,8 @@ function CandidateManager({ user, onClose, onSave, onDelete }: { user: AdminUser
             <X />
           </button>
         </header>
+
+        <div className="admin-manage-grid"><label className="admin-full-width">Candidate email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label><button className="admin-save" disabled={saving || email === user.email} onClick={() => { setSaving(true); void onSaveEmail(user, email).then(() => setMessage('Candidate email updated.')).catch((error) => setMessage(error.message)).finally(() => setSaving(false)) }}>Save email</button></div>
 
         {user.workflow_status === 'not configured' ? (
           <div className="admin-error">This candidate has not completed setup, so there are no search rules to edit.</div>

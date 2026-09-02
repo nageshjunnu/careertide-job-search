@@ -70,6 +70,7 @@ export const setupApi = {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
     }),
+  updateCandidateAccount: (token: string, payload: { currentPassword?: string; newPassword?: string; email?: string }) => makeApiCall<{ updated: boolean; email: string }>(`${API_URL}/api/candidate/account`, { method: 'PATCH', headers: { ...({ Authorization: `Bearer ${token}` }), 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
 
   getCandidateProfiles: () =>
     makeApiCall<{ profiles: Array<{ id: string; email: string; full_name: string; roles: string | null; experience: string | null; locations: string | null }> }>(

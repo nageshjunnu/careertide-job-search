@@ -170,6 +170,29 @@ candidateRouter.post('/login', async (request, response, next) => {
   }
 })
 
+candidateRouter.patch('/account', async (request, response, next) => {
+  try {
+    const token = request.headers.authorization?.replace(/^Bearer\s+/i, '')
+    if (!token) return response.status(401).json({ message: 'Candidate session token missing.' })
+    const session = await database.query<{ user_id: string }>(`SELECT user_id FROM candidate_sessions WHERE token_hash=$1 AND expires_at>NOW()`, [hashToken(token)])
+    if (!session.rows[0]) return response.status(401).json({ message: 'Candidate session expired.' })
+    const { currentPassword, newPassword, email } = request.body as { currentPassword?: string; newPassword?: string; email?: string }
+    const user = await database.query<{ password_hash: string | null; email: string }>(`SELECT password_hash,email FROM users WHERE id=$1`, [session.rows[0].user_id])
+    if (!user.rows[0]) return response.status(404).json({ message: 'Candidate not found.' })
+    if (newPassword !== undefined) {
+      if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/.test(newPassword)) return response.status(400).json({ message: 'Password must be at least 8 characters with uppercase, lowercase, number, and special character.' })
+      if (!currentPassword || !user.rows[0].password_hash || !verifyPassword(currentPassword, user.rows[0].password_hash)) return response.status(400).json({ message: 'Current password is incorrect.' })
+      await database.query(`UPDATE users SET password_hash=$1,updated_at=NOW() WHERE id=$2`, [hashPassword(newPassword), session.rows[0].user_id])
+    }
+    if (email !== undefined) {
+      const cleanEmail = email.trim().toLowerCase()
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) return response.status(400).json({ message: 'Enter a valid email address.' })
+      await database.query(`UPDATE users SET email=$1,updated_at=NOW() WHERE id=$2`, [cleanEmail, session.rows[0].user_id])
+    }
+    response.json({ updated: true, email: email?.trim().toLowerCase() ?? user.rows[0].email })
+  } catch (error) { next(error) }
+})
+
 // POST /api/candidate/register
 candidateRouter.post('/register', async (request, response, next) => {
   try {

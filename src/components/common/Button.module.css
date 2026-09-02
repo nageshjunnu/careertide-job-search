@@ -16,3 +16,5 @@
 .primary { color: #111a2e; background: #2ed3b7; }
 .secondary { color: #e6efff; background: #263450; }
 .ghost { color: #2ed3b7; background: transparent; }
+.loader { width: 13px; height: 13px; margin-right: 7px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: button-spin .7s linear infinite; }
+@keyframes button-spin { to { transform: rotate(360deg); } }

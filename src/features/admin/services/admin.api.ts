@@ -25,6 +25,10 @@ export type PlatformConfig = {
   auto_dispatch: boolean
   api_key?: string | null
   api_secret?: string | null
+  oauth_authorize_url?: string | null
+  oauth_token_url?: string | null
+  redirect_uri?: string | null
+  scopes?: string | null
   updated_at: string
 }
 
@@ -51,10 +55,11 @@ export const adminApi = {
   payments: (token: string) => makeApiCall<{ payments: Array<{ id: number; payment_id: string; amount: number; mode: string; status: string; verified_at: string | null; created_at: string; full_name: string | null; email: string | null; months_covered: number }> }>(`${API_URL}/api/admin/payments`, { headers: authHeaders(token) }),
   settings: (token: string) => makeApiCall<{ settings: Record<string, string> }>(`${API_URL}/api/admin/settings`, { headers: authHeaders(token) }),
   updateSettings: (token: string, settings: Record<string, string>) => makeApiCall(`${API_URL}/api/admin/settings`, { method: 'PATCH', headers: { ...authHeaders(token), 'Content-Type': 'application/json' }, body: JSON.stringify(settings) }),
+  updatePassword: (token: string, currentPassword: string, newPassword: string) => makeApiCall(`${API_URL}/api/admin/password`, { method: 'PATCH', headers: { ...authHeaders(token), 'Content-Type': 'application/json' }, body: JSON.stringify({ currentPassword, newPassword }) }),
   uploadLogo: (token: string, dataUrl: string) => makeApiCall<{ uploaded: boolean; logoUrl: string }>(`${API_URL}/api/admin/settings/logo`, { method: 'POST', headers: { ...authHeaders(token), 'Content-Type': 'application/json' }, body: JSON.stringify({ dataUrl }) }),
   platformConfigs: (token: string) => makeApiCall<{ configs: PlatformConfig[] }>(`${API_URL}/api/admin/platform-configs`, { headers: authHeaders(token) }),
   paymentGateways: (token: string) => makeApiCall<{ gateways: PaymentGateway[] }>(`${API_URL}/api/admin/payment-gateways`, { headers: authHeaders(token) }),
-  updatePlatformConfig: (token: string, source: string, payload: { mode?: 'api' | 'recruiter_email'; autoDispatch?: boolean; api_key?: string; api_secret?: string }) =>
+  updatePlatformConfig: (token: string, source: string, payload: { mode?: 'api' | 'recruiter_email'; autoDispatch?: boolean; api_key?: string; api_secret?: string; oauth_authorize_url?: string; oauth_token_url?: string; redirect_uri?: string; scopes?: string }) =>
     makeApiCall<{ updated: boolean; config: PlatformConfig }>(
       `${API_URL}/api/admin/platform-configs/${encodeURIComponent(source)}`,
       { method: 'PATCH', headers: { ...authHeaders(token), 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }
@@ -68,5 +73,6 @@ export const adminApi = {
     ),
   updateWorkflow: (token: string, userId: string, status: 'active' | 'paused') => makeApiCall(`${API_URL}/api/admin/users/${userId}/workflow`, { method: 'PATCH', headers: { ...authHeaders(token), 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) }),
   updateRules: (token: string, userId: string, rules: { schedule: string; timezone: string; dailyLimit: number; minimumScore: number; locations: string }) => makeApiCall(`${API_URL}/api/admin/users/${userId}/rules`, { method: 'PATCH', headers: { ...authHeaders(token), 'Content-Type': 'application/json' }, body: JSON.stringify(rules) }),
+  updateCandidateEmail: (token: string, userId: string, email: string) => makeApiCall<{ updated: boolean; email: string }>(`${API_URL}/api/admin/users/${userId}/email`, { method: 'PATCH', headers: { ...authHeaders(token), 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) }),
   deleteUser: (token: string, userId: string) => makeApiCall(`${API_URL}/api/admin/users/${userId}`, { method: 'DELETE', headers: authHeaders(token) }),
 }

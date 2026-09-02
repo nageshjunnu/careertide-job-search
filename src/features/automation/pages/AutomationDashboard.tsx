@@ -51,7 +51,9 @@ export function AutomationDashboard() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<'pipeline' | 'applied' | 'activity'>('pipeline')
   const [authModalSource, setAuthModalSource] = useState<string | null>(null)
+  const [enableAfterAuthorization, setEnableAfterAuthorization] = useState(false)
   const [profileModalOpen, setProfileModalOpen] = useState(false)
+  const [accountSettingsOpen, setAccountSettingsOpen] = useState(false)
   const [batchApplying, setBatchApplying] = useState(false)
   const [runningDiscovery, setRunningDiscovery] = useState(false)
   const [billing, setBilling] = useState<{ status: string; period_end: string | null; advance_months: number; included_jobs: number; used_jobs: number } | null>(null)
@@ -98,8 +100,8 @@ export function AutomationDashboard() {
       <PlatformAuthModal
         source={authModalSource}
         userId={serverUserId}
-        onClose={() => setAuthModalSource(null)}
-        onSuccess={() => void refreshDashboard()}
+        onClose={() => { setAuthModalSource(null); setEnableAfterAuthorization(false) }}
+        onSuccess={() => { const source = authModalSource; setAuthModalSource(null); if (source && enableAfterAuthorization) void updateSourceStatus(source, true).then(() => refreshDashboard()); else void refreshDashboard(); setEnableAfterAuthorization(false) }}
       />
     )}
     {profileModalOpen && serverUserId && (
@@ -112,9 +114,10 @@ export function AutomationDashboard() {
         onSuccess={() => void refreshDashboard()}
       />
     )}
-    <main className="automation-shell">
+    {accountSettingsOpen && serverUserId && <CandidateAccountSecurityModal userId={serverUserId} onClose={() => setAccountSettingsOpen(false)} />}
+    <main className="automation-shell" id="candidate-top">
       <div className="inline-breadcrumb">
-        <Link to="/">Home</Link> <span>›</span> <Link to="/automation">Career Assistant</Link> <span>›</span> <strong>Guided Job Search</strong>
+        <Link to="/">Home</Link> <span>›</span> <Link to="/candidate-dashboard">Candidate Dashboard</Link> <span>›</span> <strong>AI Job Automation</strong>
       </div>
       <section className="automation-welcome">
         <div className="welcome-left">
@@ -142,6 +145,7 @@ export function AutomationDashboard() {
               >
                 ✏️ Edit Profile (Job, Exp, Resume)
               </button>
+              <button className="edit-profile-pill-btn" onClick={() => setAccountSettingsOpen(true)} type="button">🔐 Account security</button>
             </div>
           </div>
         </div>
@@ -226,7 +230,7 @@ export function AutomationDashboard() {
               <li>✓ Direct OAuth platform authorization</li>
             </ul>
             {depositVerified ? <><div className="verified-payment">✓ Monthly plan verified {billing?.period_end ? `· active until ${new Date(billing.period_end).toLocaleDateString()}` : ''}</div><small>{billing ? `${Math.max(0, billing.included_jobs - billing.used_jobs)} included applications remaining · ${billing.advance_months} paid month(s)` : ''}</small><Button variant="ghost" onClick={() => setCancelOpen(true)}>{billing?.status === 'cancel_at_period_end' ? 'Cancellation scheduled' : 'Cancel payment renewal'}</Button>{billingMessage && <small>{billingMessage}</small>}</> : <Button onClick={verifyDeposit}>Review membership</Button>}
-            <div className="advance-payment-box"><div className="advance-payment-heading"><span>↗</span><div><strong>Extend your membership</strong><small>Pay ahead and keep your AI job applications active.</small></div></div><div className="advance-plan-options">{[1,3,12].map((months) => <button key={months} className={advanceMonths === months ? 'selected' : ''} onClick={() => setAdvanceMonths(months)} type="button"><strong>{months === 12 ? '1 year' : `${months} month${months > 1 ? 's' : ''}`}</strong><small>₹{(months * 1000).toLocaleString('en-IN')}</small><span>{months * 100} applications</span></button>)}</div><Button disabled={advancePaying} onClick={() => { setAdvancePaying(true); setBillingMessage('Opening secure Razorpay checkout…'); void loadRazorpay().then(() => setupApi.createPaymentOrder(advanceMonths * 100000)).then((order) => new Promise<void>((resolve, reject) => { const RazorpayCtor = (window as any).Razorpay; if (!RazorpayCtor) return reject(new Error('Razorpay checkout unavailable.')); const checkout = new RazorpayCtor({ key: order.keyId, amount: order.amount, currency: order.currency, name: 'SkillBridge', description: `${advanceMonths}-month membership advance payment`, handler: async (result: any) => { try { const verified = await setupApi.verifyRazorpayPayment(result); void verified; setBillingMessage(`Payment successful. ${advanceMonths} month(s) and ${advanceMonths * 100} applications will be added after confirmation.`); resolve(); void (serverUserId && setupApi.billingStatus(serverUserId).then(({ billing }) => setBilling(billing))) } catch (error) { reject(error) } }, modal: { ondismiss: () => reject(new Error('Payment window closed.')) } }); checkout.on('payment.failed', (result: any) => reject(new Error(result.error?.description || 'Payment failed.'))); checkout.open() })).catch((error) => setBillingMessage(error instanceof Error ? error.message : 'Advance payment failed.')).finally(() => setAdvancePaying(false)) }}>{advancePaying ? 'Opening secure payment…' : `Continue with ${advanceMonths === 12 ? 'yearly' : `${advanceMonths}-month`} payment`}</Button></div>
+            <div className="advance-payment-box"><div className="advance-payment-heading"><span>↗</span><div><strong>Extend your membership</strong><small>Pay ahead and keep your AI job applications active.</small></div></div><div className="advance-plan-options">{[1,3,12].map((months) => <button key={months} className={advanceMonths === months ? 'selected' : ''} onClick={() => setAdvanceMonths(months)} type="button"><strong>{months === 12 ? '1 year' : `${months} month${months > 1 ? 's' : ''}`}</strong><small>₹{(months * 1000).toLocaleString('en-IN')}</small><span>{months * 100} applications</span></button>)}</div><Button disabled={advancePaying} onClick={() => { setAdvancePaying(true); setBillingMessage('Opening secure Razorpay checkout…'); void loadRazorpay().then(() => setupApi.createPaymentOrder(advanceMonths * 100000)).then((order) => new Promise<void>((resolve, reject) => { const RazorpayCtor = (window as any).Razorpay; if (!RazorpayCtor) return reject(new Error('Razorpay checkout unavailable.')); const checkout = new RazorpayCtor({ key: order.keyId, amount: order.amount, currency: order.currency, name: 'SkillBridge', description: `${advanceMonths}-month membership advance payment`, handler: async (result: any) => { try { const verified = await setupApi.verifyRazorpayPayment({ ...result, userId: serverUserId ?? undefined, amount: advanceMonths * 100000 }); void verified; setBillingMessage(`Payment successful. ${advanceMonths} month(s) and ${advanceMonths * 100} applications will be added after confirmation.`); resolve(); void (serverUserId && setupApi.billingStatus(serverUserId).then(({ billing }) => setBilling(billing))) } catch (error) { reject(error) } }, modal: { ondismiss: () => reject(new Error('Payment window closed.')) } }); checkout.on('payment.failed', (result: any) => reject(new Error(result.error?.description || 'Payment failed.'))); checkout.open() })).catch((error) => setBillingMessage(error instanceof Error ? error.message : 'Advance payment failed.')).finally(() => setAdvancePaying(false)) }}>{advancePaying ? 'Opening secure payment…' : `Continue with ${advanceMonths === 12 ? 'yearly' : `${advanceMonths}-month`} payment`}</Button></div>
           </article>
           <article className="automation-panel automation-rules">
             <header>
@@ -249,7 +253,7 @@ export function AutomationDashboard() {
         </aside>
       </section>
 
-      <section className="automation-middle-section">
+      <section className="automation-middle-section" id="candidate-platforms">
         <article className="automation-panel source-workflow-panel">
           <header className="source-panel-header">
             <div>
@@ -309,7 +313,7 @@ export function AutomationDashboard() {
                           Connect & Authorize ⚡
                         </button>
                       )}
-                      <div className="platform-source-actions"><button className="workflow-control" onClick={() => void updateSourceStatus(workflow.source, workflow.status === 'paused')} type="button">{workflow.status === 'paused' ? 'Enable source' : 'Disable source'}</button>{isConnected && <button className="workflow-control" onClick={() => { setAccountChangeSource(workflow.source); setAccountOtpSent(false); setAccountChangeStep('payment'); setAccountChangeMessage('') }} type="button">Change account</button>}</div>
+                      <div className="platform-source-actions"><button className="workflow-control" onClick={() => { if (workflow.status === 'paused') { setEnableAfterAuthorization(true); setAuthModalSource(workflow.source) } else void updateSourceStatus(workflow.source, false) }} type="button">{workflow.status === 'paused' ? 'Enable source & allow access' : 'Disable source'}</button>{isConnected && <button className="workflow-control" onClick={() => { setAccountChangeSource(workflow.source); setAccountOtpSent(false); setAccountChangeStep('payment'); setAccountChangeMessage('') }} type="button">Change account</button>}</div>
                     </div>
                   </article>
                 )
@@ -321,7 +325,7 @@ export function AutomationDashboard() {
         </article>
       </section>
 
-      <section className="automation-panel pipeline-panel">
+      <section className="automation-panel pipeline-panel" id="candidate-applications">
         <header className="pipeline-header">
           <div>
             <span>LIVE OPPORTUNITY PIPELINE</span>
@@ -370,7 +374,25 @@ export function AutomationDashboard() {
       </section>
       <p className="automation-safety">CareerTide connects to verified platforms and feeds. Apply with 1-Click or review directly on the hiring platform to track every application in your pipeline.</p>
     </main>
+    <nav className="candidate-mobile-nav" aria-label="Candidate dashboard shortcuts"><a href="#candidate-top">⌂<span>Home</span></a><a href="#candidate-applications">▣<span>Applications</span></a><a href="#candidate-platforms">◉<span>Platforms</span></a><button onClick={() => setProfileModalOpen(true)} type="button">👤<span>Profile</span></button><button onClick={() => window.dispatchEvent(new Event('candidate_signout'))} type="button">↪<span>Sign out</span></button></nav>
     {cancelOpen && <div className="admin-modal-backdrop"><section className="admin-manager"><h2>Stop membership renewal?</h2><p>Your AI job automation, source access, and applications remain active until your current paid period ends. From the next month, all plans will be disabled until you make a new payment.</p><label className="setup-field"><span>Why are you stopping?</span><select value={cancelReason} onChange={(event) => setCancelReason(event.target.value)}><option>Received a job offer</option><option>Not interested at this time</option><option>Found a job through another source</option><option>Price or budget reason</option><option>Other</option></select></label><label className="setup-field"><span>Message (optional)</span><input value={cancelNote} onChange={(event) => setCancelNote(event.target.value)} placeholder="Tell us how we can improve" /></label><div className="admin-user-actions"><Button variant="ghost" onClick={() => setCancelOpen(false)}>Keep my plan</Button><Button onClick={() => { if (!serverUserId) return; void setupApi.cancelBilling(serverUserId).then((result) => { setBillingMessage(`${result.message} Reason recorded: ${cancelReason}.`); setCancelOpen(false); return setupApi.billingStatus(serverUserId) }).then(({ billing }) => setBilling(billing)) }}>Stop after this period</Button></div></section></div>}
     {accountChangeSource && <div className="admin-modal-backdrop"><section className="admin-manager"><h2>Change {accountChangeSource} account</h2><div className="account-change-progress"><span className={accountChangeStep === 'payment' ? 'active' : 'done'}>1. Payment · ₹500</span><span className={accountChangeStep === 'otp' || accountChangeStep === 'verifying' ? 'active' : ''}>2. Email OTP</span><span>3. New account</span></div>{accountChangeStep === 'payment' && <><p>Pay ₹500 to request an account change. OTP will be sent only after Razorpay verifies payment.</p><Button disabled={accountPaymentBusy} onClick={() => { if (!serverUserId) return; setAccountPaymentBusy(true); void loadRazorpay().then(() => setupApi.createPaymentOrder(50000)).then((order) => new Promise<void>((resolve, reject) => { const RazorpayCtor = (window as any).Razorpay; if (!RazorpayCtor) return reject(new Error('Razorpay checkout unavailable.')); const checkout = new RazorpayCtor({ key: order.keyId, amount: order.amount, currency: order.currency, name: 'SkillBridge', description: `₹500 ${accountChangeSource} account change`, handler: async (result: any) => { try { await setupApi.verifyRazorpayPayment({ ...result, userId: serverUserId ?? undefined, amount: 50000 }); setAccountChangeStep('sending_otp'); resolve() } catch (error) { reject(error) } }, modal: { ondismiss: () => reject(new Error('Payment window closed.')) } }); checkout.on('payment.failed', (result: any) => reject(new Error(result.error?.description || 'Payment failed.'))); checkout.open() })).then(() => { if (!serverUserId) return; return setupApi.requestAccountChangeOtp(serverUserId, accountChangeSource) }).then((result) => { if (result) { setAccountOtpSent(true); setAccountChangeStep('otp'); setAccountChangeMessage(result.message) } }).catch((error) => setAccountChangeMessage(error instanceof Error ? error.message : 'Payment failed.')).finally(() => setAccountPaymentBusy(false)) }}>{accountPaymentBusy ? 'Opening secure payment…' : 'Pay ₹500 & send OTP'}</Button>{accountChangeMessage && <p className="setup-error">{accountChangeMessage}</p>}</>}{accountOtpSent && <><label className="setup-field"><span>Email verification OTP</span><input value={accountOtp} onChange={(event) => setAccountOtp(event.target.value)} inputMode="numeric" maxLength={6} placeholder="6-digit code" /></label><small>{accountChangeMessage}</small><Button disabled={accountChangeStep === 'verifying'} onClick={() => { if (!serverUserId) return; setAccountChangeStep('verifying'); void setupApi.verifyAccountChangeOtp(serverUserId, accountChangeSource, accountOtp).then(() => { setAuthModalSource(accountChangeSource); setAccountChangeSource(null) }).catch((error) => { setAccountChangeStep('otp'); setAccountChangeMessage(error.message) }) }}>{accountChangeStep === 'verifying' ? 'Verifying OTP…' : 'Verify OTP & continue'}</Button></>}<Button variant="ghost" onClick={() => setAccountChangeSource(null)}>Cancel</Button></section></div>}
   </>
+}
+
+function CandidateAccountSecurityModal({ userId: _userId, onClose }: { userId: string; onClose: () => void }) {
+  const [email, setEmail] = useState(localStorage.getItem('candidate_email') ?? '')
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [message, setMessage] = useState('')
+  const [busy, setBusy] = useState(false)
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault(); setBusy(true); setMessage('')
+    try {
+      const token = localStorage.getItem('candidate_token'); if (!token) throw new Error('Your session has expired. Please sign in again.')
+      const result = await setupApi.updateCandidateAccount(token, { email, ...(newPassword ? { currentPassword, newPassword } : {}) })
+      localStorage.setItem('candidate_email', result.email); window.dispatchEvent(new Event('candidate_auth_change')); setMessage('Account details updated successfully.'); setCurrentPassword(''); setNewPassword('')
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Could not update account details.') } finally { setBusy(false) }
+  }
+  return <div className="platform-modal-backdrop" onClick={onClose}><section className="platform-modal" onClick={(event) => event.stopPropagation()}><header className="platform-modal-header"><div className="platform-modal-title"><span className="platform-logo-mark">🔐</span><div><h3>Account security</h3><small>Update your candidate email or password</small></div></div><button className="platform-modal-close" onClick={onClose} type="button">✕</button></header><form onSubmit={(event) => void save(event)}><div className="platform-modal-body"><label className="platform-field"><span>Candidate email</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label><label className="platform-field"><span>Current password (required to change password)</span><input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label><label className="platform-field"><span>New password</span><input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="8+ chars, upper/lower/number/symbol" /></label>{message && <div className="setup-success">{message}</div>}<Button type="submit" disabled={busy}>{busy ? 'Updating…' : 'Save account changes'}</Button></div></form></section></div>
 }

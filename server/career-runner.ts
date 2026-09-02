@@ -186,8 +186,8 @@ export async function runGuidedSearch(userId: string) {
     // Fetch jobs concurrently from live feeds and role generators
     const [remotiveJobs, arbeitnowJobs, jobicyJobs] = await Promise.all([
       config.sources.includes('Remotive') ? fetchRemotiveJobs(primaryQuery) : Promise.resolve([]),
-      fetchArbeitnowJobs(primaryQuery),
-      fetchJobicyJobs(primaryQuery),
+      config.sources.includes('Arbeitnow') ? fetchArbeitnowJobs(primaryQuery) : Promise.resolve([]),
+      config.sources.includes('Jobicy') ? fetchJobicyJobs(primaryQuery) : Promise.resolve([]),
     ])
 
     const targetedPlatformJobs = generateTargetedSourceJobs(
@@ -197,12 +197,18 @@ export async function runGuidedSearch(userId: string) {
       config.locations
     )
 
+    const requestedLocations = config.locations.split(',').map((value) => value.trim().toLowerCase()).filter(Boolean)
+    const locationMatches = (job: RemoteJob) => {
+      const location = (job.candidate_required_location || '').toLowerCase()
+      if (!requestedLocations.length || location.includes('remote')) return true
+      return requestedLocations.some((wanted) => location.includes(wanted) || wanted.includes(location))
+    }
     const allDiscovered: RemoteJob[] = [
       ...remotiveJobs,
       ...arbeitnowJobs,
       ...jobicyJobs,
       ...targetedPlatformJobs,
-    ]
+    ].filter((job) => config.sources.includes(job.source || '') && locationMatches(job))
 
     await database.query(
       `UPDATE career_runs SET progress_stage='Ranking matches by skill, experience, and location fit', progress_percent=70 WHERE id=$1`,

@@ -46,3 +46,7 @@ ALTER TABLE platform_integrations ADD COLUMN IF NOT EXISTS account_identifier TE
 CREATE TABLE IF NOT EXISTS platform_dispatch_configs (source TEXT PRIMARY KEY,mode TEXT NOT NULL DEFAULT 'recruiter_email',auto_dispatch BOOLEAN NOT NULL DEFAULT TRUE,updated_at TIMESTAMPTZ DEFAULT NOW());
 ALTER TABLE platform_dispatch_configs ADD COLUMN IF NOT EXISTS api_key TEXT;
 ALTER TABLE platform_dispatch_configs ADD COLUMN IF NOT EXISTS api_secret TEXT;
+ALTER TABLE platform_dispatch_configs ADD COLUMN IF NOT EXISTS oauth_authorize_url TEXT;
+ALTER TABLE platform_dispatch_configs ADD COLUMN IF NOT EXISTS oauth_token_url TEXT;
+ALTER TABLE platform_dispatch_configs ADD COLUMN IF NOT EXISTS redirect_uri TEXT;
+ALTER TABLE platform_dispatch_configs ADD COLUMN IF NOT EXISTS scopes TEXT;
