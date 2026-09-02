@@ -57,8 +57,7 @@ export function AutomationProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!serverUserId) return
     const initialTimer = window.setTimeout(() => void refreshDashboard(), 0)
-    const timer = window.setInterval(() => void refreshDashboard(), 2_000)
-    return () => { window.clearTimeout(initialTimer); window.clearInterval(timer) }
+    return () => window.clearTimeout(initialTimer)
   }, [serverUserId, refreshDashboard])
   useEffect(() => {
     if (runProgress?.status !== 'completed') return

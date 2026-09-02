@@ -413,7 +413,7 @@ import { candidateRouter } from './routes/candidate.js'
 app.use('/api/candidate', candidateRouter)
 app.use('/api/setup', setupRouter)
 app.post('/api/career-runs/:userId', async (request, response, next) => {
-  try { response.json(await runGuidedSearch(request.params.userId)) } catch (error) { next(error) }
+  try { response.json(await runGuidedSearch(request.params.userId)) } catch (error) { if (error instanceof Error && /paid membership/i.test(error.message)) return response.status(402).json({ message: error.message }); next(error) }
 })
 app.post('/api/internal/run-scheduled-searches', async (request, response, next) => {
   try {
@@ -638,16 +638,16 @@ app.post('/api/career/matches/:matchId/apply', async (request, response, next) =
           company: match.company,
           source: match.source,
           dispatchMode: mode,
-          recruiterEmail: recruiterEmail || `careers@${match.company.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`,
+          recruiterEmail: recruiterEmail || null,
           appliedAt: new Date().toISOString(),
         }),
       ]
     )
 
     let _dispatchResult = null
-    const targetEmail = recruiterEmail || `careers@${match.company.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`
+    const targetEmail = recruiterEmail
 
-    if (mode === 'recruiter_email' || targetEmail) {
+    if (targetEmail) {
       _dispatchResult = await sendRecruiterApplicationEmail({
         userId,
         recruiterEmail: targetEmail,
@@ -744,8 +744,8 @@ app.post('/api/career/matches/batch-apply', async (request, response, next) => {
     // Dispatch recruiter emails for each match
     for (const match of matches.rows) {
       const text = typeof match.raw_data === 'string' ? match.raw_data : JSON.stringify(match.raw_data)
-      const recruiterEmail = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0]?.toLowerCase() ?? `careers@${match.company.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`
-      if (user?.email) {
+      const recruiterEmail = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0]?.toLowerCase() ?? null
+      if (user?.email && recruiterEmail) {
         void sendRecruiterApplicationEmail({
           userId,
           recruiterEmail,
