@@ -253,7 +253,7 @@ app.patch('/api/admin/job-run-schedules/:id', requireAdmin, async (request: Admi
     const updated = await database.query(`UPDATE job_run_schedules SET cron_expression=COALESCE($2,cron_expression),active=COALESCE($3,active),timezone=COALESCE($4,timezone),updated_at=NOW() WHERE id=$1 RETURNING id,name,cron_expression,active,timezone,updated_at`, [request.params.id, cronExpression ?? null, active ?? null, timezone ?? null])
     if (!updated.rows[0]) return response.status(404).json({ message: 'Schedule not found.' })
     await refreshJobSchedules()
-    await auditAdmin(request.adminEmail!, 'updated_job_run_schedule', 'job_run_schedule', request.params.id, { cronExpression, active, timezone })
+    await auditAdmin(request.adminEmail!, 'updated_job_run_schedule', 'job_run_schedule', String(request.params.id), { cronExpression, active, timezone })
     response.json({ updated: true, schedule: updated.rows[0] })
   } catch (error) { next(error) }
 })
@@ -295,7 +295,7 @@ app.patch('/api/admin/users/:userId/workflow', requireAdmin, async (request: Adm
     if (!['active', 'paused'].includes(status ?? '')) return response.status(400).json({ message: 'Choose active or paused.' })
     const updated = await database.query('UPDATE career_workflows SET status=$2,updated_at=NOW() WHERE user_id=$1 RETURNING user_id,status', [request.params.userId, status])
     if (!updated.rows[0]) return response.status(404).json({ message: 'Workflow not found.' })
-    await auditAdmin(request.adminEmail!, `workflow_${status}`, 'user', request.params.userId)
+    await auditAdmin(request.adminEmail!, `workflow_${status}`, 'user', String(request.params.userId))
     response.json({ updated: true, workflow: updated.rows[0] })
   } catch (error) { next(error) }
 })
@@ -310,7 +310,7 @@ app.patch('/api/admin/users/:userId/rules', requireAdmin, async (request: AdminR
       if (!workflow.rows[0]) { await client.query('ROLLBACK'); return response.status(404).json({ message: 'Workflow not found.' }) }
       await client.query('UPDATE career_profiles SET locations=$2,updated_at=NOW() WHERE user_id=$1', [request.params.userId, locations.trim()])
       await client.query('COMMIT')
-      await auditAdmin(request.adminEmail!, 'workflow_rules_updated', 'user', request.params.userId, { schedule, timezone, dailyLimit, minimumScore, locations })
+      await auditAdmin(request.adminEmail!, 'workflow_rules_updated', 'user', String(request.params.userId), { schedule, timezone, dailyLimit, minimumScore, locations })
       response.json({ updated: true })
     } catch (error) { await client.query('ROLLBACK'); throw error } finally { client.release() }
   } catch (error) { next(error) }
@@ -321,7 +321,7 @@ app.patch('/api/admin/users/:userId/email', requireAdmin, async (request: AdminR
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return response.status(400).json({ message: 'Enter a valid candidate email address.' })
     const updated = await database.query(`UPDATE users SET email=$2,updated_at=NOW() WHERE id=$1 RETURNING id,email`, [request.params.userId, email])
     if (!updated.rows[0]) return response.status(404).json({ message: 'Candidate not found.' })
-    await auditAdmin(request.adminEmail!, 'candidate_email_updated', 'user', request.params.userId, { email })
+    await auditAdmin(request.adminEmail!, 'candidate_email_updated', 'user', String(request.params.userId), { email })
     response.json({ updated: true, email })
   } catch (error: any) { if (error?.code === '23505') return response.status(409).json({ message: 'That email is already used by another candidate.' }); next(error) }
 })
@@ -330,7 +330,7 @@ app.delete('/api/admin/users/:userId', requireAdmin, async (request: AdminReques
     const target = await database.query<{ email: string }>('SELECT email FROM users WHERE id=$1', [request.params.userId])
     if (!target.rows[0]) return response.status(404).json({ message: 'Candidate not found.' })
     await database.query('DELETE FROM users WHERE id=$1', [request.params.userId])
-    await auditAdmin(request.adminEmail!, 'candidate_deleted', 'user', request.params.userId, { email: target.rows[0].email })
+    await auditAdmin(request.adminEmail!, 'candidate_deleted', 'user', String(request.params.userId), { email: target.rows[0].email })
     response.json({ deleted: true })
   } catch (error) { next(error) }
 })
@@ -389,7 +389,7 @@ app.patch('/api/admin/payment-gateways/:name', requireAdmin, async (request: Adm
     const { enabled, isDefault, mode, apiKey, apiSecret, webhookUrl, webhookSecret } = request.body as { enabled?: boolean; isDefault?: boolean; mode?: string; apiKey?: string; apiSecret?: string; webhookUrl?: string; webhookSecret?: string }
     if (mode && !['test', 'live'].includes(mode)) return response.status(400).json({ message: 'Mode must be test or live.' })
     if (enabled !== undefined && typeof enabled !== 'boolean') return response.status(400).json({ message: 'Enabled must be true or false.' })
-    const name = request.params.name.trim()
+    const name = String(request.params.name).trim()
     if (!DEFAULT_PAYMENT_GATEWAYS.includes(name.toLowerCase())) return response.status(404).json({ message: 'Unknown payment gateway.' })
     const gatewayName = name.toLowerCase()
     const existing = await database.query<{ config: Record<string, unknown> }>(`SELECT config FROM payment_gateways WHERE name=$1`, [gatewayName])
